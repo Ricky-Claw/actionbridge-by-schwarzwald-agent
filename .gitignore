@@ -1,0 +1,12 @@
+node_modules/
+.next/
+dist/
+build/
+coverage/
+.env
+.env.*
+*.log
+.DS_Store
+auth-profiles.json
+models.json
+secrets/

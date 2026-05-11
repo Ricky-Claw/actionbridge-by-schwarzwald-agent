@@ -4,9 +4,35 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { redactActionBridgeValue } from '@/lib/actionbridge/redaction';
 import { createCoreServiceClient } from '@/lib/core/service-client';
+import { isPrivateActionBridgeHost } from '@/lib/actionbridge/http-connector';
 
 const ACTIONBRIDGE_CONNECTOR_TYPES = new Set(['http']);
 const ACTIONBRIDGE_AUTH_MODES = new Set(['none', 'bearer', 'api_key', 'basic']);
+
+function normalizeActionBridgeAllowedOrigins(value: unknown): string[] | null {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) return null;
+
+  const origins = new Set<string>();
+  for (const entry of value) {
+    if (typeof entry !== 'string') return null;
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(entry);
+    } catch {
+      return null;
+    }
+
+    if (parsedUrl.protocol !== 'https:') return null;
+    if (parsedUrl.username || parsedUrl.password) return null;
+    if (parsedUrl.pathname !== '/' || parsedUrl.search || parsedUrl.hash) return null;
+    if (isPrivateActionBridgeHost(parsedUrl.hostname)) return null;
+
+    origins.add(parsedUrl.origin);
+  }
+
+  return [...origins];
+}
 
 async function requireActionBridgeUser() {
   const supabase = await createClient();
@@ -38,6 +64,10 @@ function parseActionBridgeConnectorDraft(body: Record<string, unknown>) {
 
   if (parsedUrl.protocol !== 'https:') return null;
   if (parsedUrl.username || parsedUrl.password) return null;
+  if (isPrivateActionBridgeHost(parsedUrl.hostname)) return null;
+
+  const allowedOrigins = normalizeActionBridgeAllowedOrigins(body.allowedOrigins ?? body.allowed_origins);
+  if (!allowedOrigins) return null;
 
   return {
     name,
@@ -46,6 +76,11 @@ function parseActionBridgeConnectorDraft(body: Record<string, unknown>) {
     auth_mode: authMode,
     secret_ref: null,
     enabled: typeof body.enabled === 'boolean' ? body.enabled : true,
+    allowed_origins: allowedOrigins,
+    capabilities: [],
+    network_execution_enabled: false,
+    safety_status: 'untested',
+    permission_status: 'draft',
   };
 }
 
@@ -55,7 +90,7 @@ export async function GET() {
 
   const { data, error } = await (supabase as any)
     .from('actionbridge_connectors')
-    .select('id, user_id, name, type, base_url, auth_mode, enabled, created_at, updated_at')
+    .select('id, user_id, name, type, base_url, auth_mode, enabled, allowed_origins, capabilities, network_execution_enabled, safety_status, permission_status, created_at, updated_at')
     .eq('user_id', user!.id)
     .order('created_at', { ascending: false })
     .limit(100);
@@ -73,6 +108,11 @@ export async function GET() {
       baseUrl: connector.base_url,
       authMode: connector.auth_mode,
       enabled: connector.enabled,
+      allowedOrigins: connector.allowed_origins || [],
+      capabilities: connector.capabilities || [],
+      networkExecutionEnabled: connector.network_execution_enabled === true,
+      safetyStatus: connector.safety_status,
+      permissionStatus: connector.permission_status,
       createdAt: connector.created_at,
       updatedAt: connector.updated_at,
     })),
@@ -110,7 +150,7 @@ export async function POST(request: NextRequest) {
       user_id: user!.id,
       ...draft,
     })
-    .select('id, user_id, name, type, base_url, auth_mode, enabled, created_at, updated_at')
+    .select('id, user_id, name, type, base_url, auth_mode, enabled, allowed_origins, capabilities, network_execution_enabled, safety_status, permission_status, created_at, updated_at')
     .single();
 
   if (error || !data) {
@@ -126,6 +166,11 @@ export async function POST(request: NextRequest) {
       baseUrl: data.base_url,
       authMode: data.auth_mode,
       enabled: data.enabled,
+      allowedOrigins: data.allowed_origins || [],
+      capabilities: data.capabilities || [],
+      networkExecutionEnabled: data.network_execution_enabled === true,
+      safetyStatus: data.safety_status,
+      permissionStatus: data.permission_status,
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     },

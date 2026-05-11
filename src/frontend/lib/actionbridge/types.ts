@@ -22,6 +22,9 @@ export interface ActionBridgeActionDefinition {
   requiresApproval?: boolean;
 }
 
+export type ActionBridgeSafetyStatus = 'untested' | 'pass' | 'fail';
+export type ActionBridgePermissionStatus = 'draft' | 'active' | 'paused' | 'revoked';
+
 export interface ActionBridgeConnector {
   id: string;
   tenantId: string;
@@ -31,6 +34,11 @@ export interface ActionBridgeConnector {
   authMode: 'none' | 'bearer' | 'api_key' | 'basic';
   secretRef?: string;
   enabled: boolean;
+  allowedOrigins?: string[];
+  capabilities?: string[];
+  networkExecutionEnabled?: boolean;
+  safetyStatus?: ActionBridgeSafetyStatus;
+  permissionStatus?: ActionBridgePermissionStatus;
 }
 
 export interface ActionBridgePolicyContext {

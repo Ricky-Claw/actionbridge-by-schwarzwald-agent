@@ -2,7 +2,6 @@ import 'server-only';
 
 import type { ActionBridgeActionDefinition, ActionBridgeConnector } from './types';
 import { redactActionBridgeValue } from './redaction';
-import { isPrivateIpAddress } from '../security/safe-fetch';
 
 export interface ExecuteHttpActionConnectorInput {
   connector: ActionBridgeConnector;
@@ -24,11 +23,24 @@ export interface ExecuteHttpActionConnectorResult {
 const PRIVATE_HOST_PREFIXES = ['127.', '10.', '172.', '192.168', '169.254'];
 const BLOCKED_HOSTS = new Set(['localhost', '0.0.0.0', '::', '::1']);
 
-export function isPrivateActionBridgeHost(hostname: string): boolean {
+export function isPrivateIpAddress(hostname: string): boolean {
   const normalized = hostname.trim().toLowerCase().replace(/^\[|\]$/g, '');
   if (BLOCKED_HOSTS.has(normalized)) return true;
-  if (isPrivateIpAddress(normalized)) return true;
   if (PRIVATE_HOST_PREFIXES.some((prefix) => normalized.startsWith(prefix))) return true;
+  if (normalized.includes('::ffff:')) return true;
+
+  const ipv4Parts = normalized.split('.').map((part) => Number(part));
+  if (ipv4Parts.length === 4 && ipv4Parts.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)) {
+    const [a, b] = ipv4Parts;
+    return a === 10 || a === 127 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254);
+  }
+
+  return normalized === '::1' || normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80:');
+}
+
+export function isPrivateActionBridgeHost(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase().replace(/^\[|\]$/g, '');
+  if (isPrivateIpAddress(normalized)) return true;
   return normalized.endsWith('.local') || normalized.endsWith('.internal');
 }
 
@@ -52,8 +64,8 @@ export async function executeHttpActionConnector(
   }
 
   const target = new URL(request.path || '/', request.connector.baseUrl);
-  if (!['http:', 'https:'].includes(target.protocol)) {
-    return { ok: false, status: 400, redactedInput, error: 'Unsupported connector protocol.' };
+  if (target.protocol !== 'https:') {
+    return { ok: false, status: 400, redactedInput, error: 'Unsupported connector protocol. HTTPS is required.' };
   }
 
   if (isPrivateActionBridgeHost(target.hostname)) {

@@ -1,6 +1,24 @@
 -- ActionBridge execution state + idempotency guards
 -- Real connector/network execution remains disabled in application code.
 
+
+ALTER TABLE public.actionbridge_connectors
+  ADD COLUMN IF NOT EXISTS allowed_origins JSONB NOT NULL DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS capabilities JSONB NOT NULL DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS network_execution_enabled BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS safety_status TEXT NOT NULL DEFAULT 'untested',
+  ADD COLUMN IF NOT EXISTS permission_status TEXT NOT NULL DEFAULT 'draft';
+
+ALTER TABLE public.actionbridge_connectors
+  DROP CONSTRAINT IF EXISTS actionbridge_connectors_safety_status_check,
+  ADD CONSTRAINT actionbridge_connectors_safety_status_check
+  CHECK (safety_status IN ('untested', 'pass', 'fail'));
+
+ALTER TABLE public.actionbridge_connectors
+  DROP CONSTRAINT IF EXISTS actionbridge_connectors_permission_status_check,
+  ADD CONSTRAINT actionbridge_connectors_permission_status_check
+  CHECK (permission_status IN ('draft', 'active', 'paused', 'revoked'));
+
 ALTER TABLE public.actionbridge_approvals
   DROP CONSTRAINT IF EXISTS actionbridge_approvals_status_check;
 
@@ -117,7 +135,7 @@ BEGIN
     p_idempotency_key,
     'executing',
     v_approval.redacted_input,
-    jsonb_build_object('status', 'ready_for_connector_execution', 'networkExecution', false)
+    jsonb_build_object('status', 'dry_run_noop', 'mode', 'policy_check_succeeded_without_execution', 'networkExecution', false)
   ) RETURNING * INTO v_execution;
 
   INSERT INTO public.actionbridge_audit_logs (
@@ -139,7 +157,7 @@ BEGIN
     'allow',
     'pending',
     v_execution.redacted_input,
-    jsonb_build_object('approvalId', v_execution.approval_id, 'execution_id', v_execution.id, 'idempotencyKey', p_idempotency_key, 'networkExecution', false)
+    jsonb_build_object('approvalId', v_execution.approval_id, 'execution_id', v_execution.id, 'idempotencyKeyPrefix', left(p_idempotency_key, 8), 'networkExecution', false)
   );
 
   RETURN QUERY SELECT

@@ -13,6 +13,11 @@ const requiredFiles = [
   'src/frontend/lib/actionbridge/policy.ts',
   'src/frontend/lib/actionbridge/redaction.ts',
   'src/frontend/lib/actionbridge/http-connector.ts',
+  'src/frontend/lib/actionbridge/target-validation.ts',
+  'src/frontend/lib/actionbridge/execution-plan.ts',
+  'src/frontend/lib/actionbridge/execution-controls.ts',
+  'src/frontend/lib/actionbridge/response-limits.ts',
+  'src/frontend/lib/actionbridge/audit-taxonomy.ts',
 ];
 
 for (const file of requiredFiles) {
@@ -62,10 +67,67 @@ if (!process.exitCode) {
   if (connector.includes('secretValue') && !connector.includes('redactActionBridgeValue')) {
     fail('HTTP connector references secretValue without redaction path');
   }
-  if (!connector.includes('http:') || !connector.includes('https:')) {
-    fail('HTTP connector must validate allowed URL protocols');
+  if (connector.includes("'http:'") || connector.includes('"http:"')) {
+    fail('HTTP connector must not allow plain HTTP targets');
+  }
+  if (!connector.includes('https:')) {
+    fail('HTTP connector must require HTTPS target protocols');
   }
   if (!process.exitCode) pass('ActionBridge HTTP connector is server-only and validates protocols');
+
+  const targetValidation = read('src/frontend/lib/actionbridge/target-validation.ts');
+  for (const token of [
+    'validateActionBridgeTarget',
+    'defaultDenyActionBridgeAllowlist',
+    'networkExecution: false',
+    'isPrivateActionBridgeHost',
+    'Unsupported connector protocol',
+    'Connector target is not in the explicit allowlist',
+  ]) {
+    if (!targetValidation.includes(token)) fail(`target-validation.ts missing ${token}`);
+  }
+  if (targetValidation.includes('fetch(')) fail('target-validation.ts must not perform network execution');
+  if (!process.exitCode) pass('ActionBridge target validation is default-deny and non-networked');
+
+  const executionPlan = read('src/frontend/lib/actionbridge/execution-plan.ts');
+  for (const token of [
+    'classifyActionBridgeAction',
+    'createActionBridgeExecutionPlan',
+    "riskLevel === 'read'",
+    'readOnly',
+    'networkExecution: false',
+    'redactedInput',
+    'redactedResultSummary',
+  ]) {
+    if (!executionPlan.includes(token)) fail(`execution-plan.ts missing ${token}`);
+  }
+  if (executionPlan.includes('fetch(')) fail('execution-plan.ts must not perform network execution');
+  if (!process.exitCode) pass('ActionBridge execution plan classifies read-only actions and emits redacted dry-run plans');
+
+  const executionControls = read('src/frontend/lib/actionbridge/execution-controls.ts');
+  for (const token of [
+    'normalizeActionBridgeExecutionControls',
+    'decideActionBridgeNetworkExecutionControls',
+    'killSwitchActive',
+    'networkExecution: false',
+    'Network executor is not wired in this release',
+  ]) {
+    if (!executionControls.includes(token)) fail(`execution-controls.ts missing ${token}`);
+  }
+  if (executionControls.includes('fetch(')) fail('execution-controls.ts must not perform network execution');
+  if (!process.exitCode) pass('ActionBridge execution controls include kill-switch scaffolding without enabling network execution');
+
+  const responseLimits = read('src/frontend/lib/actionbridge/response-limits.ts');
+  for (const token of ['defaultActionBridgeResponseLimitPolicy', 'maxBytes', 'maxJsonDepth', 'maxArrayItems', 'maxObjectKeys', 'enforceActionBridgeResponseByteLimit']) {
+    if (!responseLimits.includes(token)) fail(`response-limits.ts missing ${token}`);
+  }
+  if (!process.exitCode) pass('ActionBridge response limit contract is defined');
+
+  const auditTaxonomy = read('src/frontend/lib/actionbridge/audit-taxonomy.ts');
+  for (const token of ['ActionBridgeAuditCategory', 'execution_control', 'target_validation', 'dry_run_result', 'ACTIONBRIDGE_KILL_SWITCH_BLOCKED', 'networkExecution: false']) {
+    if (!auditTaxonomy.includes(token)) fail(`audit-taxonomy.ts missing ${token}`);
+  }
+  if (!process.exitCode) pass('ActionBridge audit taxonomy covers policy, target, control, and dry-run events');
 }
 
 
@@ -237,11 +299,37 @@ if (exists('src/frontend/lib/actionbridge/persistence.ts')) {
 
 if (exists('src/frontend/app/api/actionbridge/execute/route.ts')) {
   const executeRouteState = read('src/frontend/app/api/actionbridge/execute/route.ts');
-  for (const token of ['approvalId', 'idempotencyKey', 'consumeApprovedActionBridgeExecution', 'persistActionBridgeExecutionResult', 'executionId', 'ACTIONBRIDGE_APPROVAL_NOT_EXECUTABLE', 'ACTIONBRIDGE_EXECUTION_RESULT_PERSIST_FAILED', 'dry_run_succeeded', 'networkExecution: false']) {
+  for (const token of ['approvalId', 'idempotencyKey', 'consumeApprovedActionBridgeExecution', 'persistActionBridgeExecutionResult', 'executionId', 'ACTIONBRIDGE_APPROVAL_NOT_EXECUTABLE', 'ACTIONBRIDGE_EXECUTION_RESULT_PERSIST_FAILED', 'dry_run_noop', 'networkExecution: false']) {
     if (!executeRouteState.includes(token)) fail(`execute route missing execution state/idempotency token ${token}`);
+  }
+  for (const token of ['createActionBridgeExecutionPlan', 'validateActionBridgeTarget', 'parseServerActionBridgeAllowlist', 'policy_check_succeeded_without_execution', 'decideActionBridgeNetworkExecutionControls', 'summarizeActionBridgeResponseLimitPolicy', 'actionBridgeAuditTaxonomy']) {
+    if (!executeRouteState.includes(token)) fail(`execute route missing dry-run planner guard ${token}`);
+  }
+  if (executeRouteState.includes('body.allowlist')) {
+    fail('execute route must not trust caller-supplied body.allowlist for execution target allowlisting');
+  }
+  for (const token of ['allowed_origins', 'network_execution_enabled', 'safety_status', 'permission_status']) {
+    if (!executeRouteState.includes(token)) fail(`execute route must select connector execution control field ${token}`);
+  }
+  if (!executeRouteState.includes('idempotencyKeyDigest') || executeRouteState.includes('idempotencyKey: consumed.execution.idempotencyKey')) {
+    fail('execute route must return only a hashed idempotency key digest, not the raw key');
+  }
+  if (executeRouteState.includes('dry_run_succeeded') || executeRouteState.includes('approval_consumed_without_network_execution')) {
+    fail('execute route must avoid ambiguous dry-run success/execution wording');
   }
   if (executeRouteState.includes('executeHttpActionConnector(')) fail('execute route must not enable real network ActionBridge execution yet');
   if (!process.exitCode) pass('ActionBridge execute route consumes approvals once and records a non-network dry-run result');
+}
+
+if (exists('src/frontend/app/api/actionbridge/connectors/route.ts')) {
+  const connectorsRoute = read('src/frontend/app/api/actionbridge/connectors/route.ts');
+  for (const token of ['normalizeActionBridgeAllowedOrigins', 'allowed_origins', 'network_execution_enabled: false', 'safety_status', 'permission_status']) {
+    if (!connectorsRoute.includes(token)) fail(`connectors route missing server-owned execution control token ${token}`);
+  }
+  if (connectorsRoute.includes('network_execution_enabled: body')) {
+    fail('connectors route must not let callers enable network_execution_enabled directly');
+  }
+  if (!process.exitCode) pass('ActionBridge connectors route stores server-owned allowlist and execution controls');
 }
 
 if (migrationFiles.length) {
@@ -260,6 +348,23 @@ if (migrationFiles.length) {
   }
   if (!migration.includes('GRANT EXECUTE ON FUNCTION public.consume_actionbridge_approval_for_execution(UUID, UUID, TEXT) TO service_role')) {
     fail('ActionBridge consume execution RPC must be executable by service_role');
+  }
+  for (const token of [
+    'allowed_origins JSONB NOT NULL DEFAULT',
+    'capabilities JSONB NOT NULL DEFAULT',
+    'network_execution_enabled BOOLEAN NOT NULL DEFAULT false',
+    'safety_status TEXT NOT NULL DEFAULT',
+    "CHECK (safety_status IN ('untested', 'pass', 'fail'))",
+    'permission_status TEXT NOT NULL DEFAULT',
+    "CHECK (permission_status IN ('draft', 'active', 'paused', 'revoked'))",
+  ]) {
+    if (!migration.includes(token)) fail(`ActionBridge migration missing connector execution control: ${token}`);
+  }
+  if (migration.includes('dry_run_succeeded') || migration.includes('approval_consumed_without_network_execution')) {
+    fail('ActionBridge migration must avoid ambiguous dry-run success/execution wording');
+  }
+  if (migration.includes("'idempotencyKey', p_idempotency_key")) {
+    fail('ActionBridge migration audit summary must not store raw idempotency keys');
   }
   if (!process.exitCode) pass('ActionBridge migration defines consume-once approval execution state and idempotency');
 }

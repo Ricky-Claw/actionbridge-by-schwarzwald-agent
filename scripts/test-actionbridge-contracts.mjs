@@ -14,6 +14,7 @@ const requiredFiles = [
   'src/frontend/lib/actionbridge/redaction.ts',
   'src/frontend/lib/actionbridge/http-connector.ts',
   'src/frontend/lib/actionbridge/target-validation.ts',
+  'src/frontend/lib/actionbridge/dns-ip-guard.ts',
   'src/frontend/lib/actionbridge/execution-plan.ts',
   'src/frontend/lib/actionbridge/execution-controls.ts',
   'src/frontend/lib/actionbridge/response-limits.ts',
@@ -89,6 +90,20 @@ if (!process.exitCode) {
   if (targetValidation.includes('fetch(')) fail('target-validation.ts must not perform network execution');
   if (!process.exitCode) pass('ActionBridge target validation is default-deny and non-networked');
 
+  const dnsIpGuard = read('src/frontend/lib/actionbridge/dns-ip-guard.ts');
+  for (const token of [
+    'ActionBridgeDnsResolutionSnapshot',
+    'decideActionBridgeDnsPinning',
+    'isActionBridgePrivateIpAddress',
+    'isActionBridgeBlockedHost',
+    'DNS resolution included private or link-local address',
+    'networkExecution: false',
+  ]) {
+    if (!dnsIpGuard.includes(token)) fail(`dns-ip-guard.ts missing ${token}`);
+  }
+  if (dnsIpGuard.includes('fetch(') || dnsIpGuard.includes('dns.lookup') || dnsIpGuard.includes('resolve')) fail('dns-ip-guard.ts must classify supplied DNS snapshots only');
+  if (!process.exitCode) pass('ActionBridge DNS/IP guard classifies offline resolver snapshots without network execution');
+
   const executionPlan = read('src/frontend/lib/actionbridge/execution-plan.ts');
   for (const token of [
     'classifyActionBridgeAction',
@@ -124,10 +139,10 @@ if (!process.exitCode) {
   if (!process.exitCode) pass('ActionBridge response limit contract is defined');
 
   const auditTaxonomy = read('src/frontend/lib/actionbridge/audit-taxonomy.ts');
-  for (const token of ['ActionBridgeAuditCategory', 'execution_control', 'target_validation', 'dry_run_result', 'ACTIONBRIDGE_KILL_SWITCH_BLOCKED', 'networkExecution: false']) {
+  for (const token of ['ActionBridgeAuditCategory', 'execution_control', 'target_validation', 'dry_run_result', 'ACTIONBRIDGE_KILL_SWITCH_BLOCKED', 'ACTIONBRIDGE_APPROVAL_CONSUMED', 'ACTIONBRIDGE_IDEMPOTENCY_REPLAY', 'ACTIONBRIDGE_NETWORK_EXECUTOR_UNAVAILABLE', 'ACTIONBRIDGE_EXECUTION_RESULT_PERSISTED', 'networkExecution: false']) {
     if (!auditTaxonomy.includes(token)) fail(`audit-taxonomy.ts missing ${token}`);
   }
-  if (!process.exitCode) pass('ActionBridge audit taxonomy covers policy, target, control, and dry-run events');
+  if (!process.exitCode) pass('ActionBridge audit taxonomy covers policy, approval, target, control, and execution-result events');
 }
 
 
@@ -136,6 +151,8 @@ const routeFiles = [
   'src/frontend/app/api/actionbridge/connectors/route.ts',
   'src/frontend/app/api/actionbridge/execute/route.ts',
   'src/frontend/app/api/actionbridge/approvals/route.ts',
+  'src/frontend/app/api/actionbridge/audit/route.ts',
+  'src/frontend/app/api/actionbridge/executions/route.ts',
 ];
 for (const file of routeFiles) {
   if (!exists(file)) fail(`Missing ActionBridge route: ${file}`);
@@ -147,7 +164,9 @@ if (!process.exitCode) {
   const connectorsRoute = read('src/frontend/app/api/actionbridge/connectors/route.ts');
   const executeRoute = read('src/frontend/app/api/actionbridge/execute/route.ts');
   const approvalsRoute = read('src/frontend/app/api/actionbridge/approvals/route.ts');
-  for (const [name, source] of [['actions', actionsRoute], ['connectors', connectorsRoute], ['execute', executeRoute], ['approvals', approvalsRoute]]) {
+  const auditRoute = read('src/frontend/app/api/actionbridge/audit/route.ts');
+  const executionsRoute = read('src/frontend/app/api/actionbridge/executions/route.ts');
+  for (const [name, source] of [['actions', actionsRoute], ['connectors', connectorsRoute], ['execute', executeRoute], ['approvals', approvalsRoute], ['audit', auditRoute], ['executions', executionsRoute]]) {
     if (!source.includes('createClient')) fail(`${name} route must use Supabase server auth`);
     if (!source.includes('auth.getUser')) fail(`${name} route must require authenticated user`);
     if (!source.includes('UNAUTHORIZED')) fail(`${name} route must fail closed when unauthenticated`);
@@ -177,6 +196,13 @@ if (!process.exitCode) {
   if (!approvalsRoute.includes('ACTIONBRIDGE_APPROVAL_DECISION_FAILED')) fail('approvals route must fail closed if decision persistence fails');
   if (!approvalsRoute.includes('decide_actionbridge_approval_atomic')) fail('approvals route must use atomic approval decision RPC with audit');
   if (!approvalsRoute.includes('createCoreServiceClient')) fail('approvals route must use server-only service client for approval status transitions');
+  for (const token of ['actionbridge_audit_logs', ".eq('user_id', user!.id)", 'redacted_input', 'result_summary', 'sanitizeActionBridgeVisibilityResult(entry.result_summary)', 'ACTIONBRIDGE_AUDIT_LIST_FAILED']) {
+    if (!auditRoute.includes(token)) fail(`audit route missing safe visibility token ${token}`);
+  }
+  for (const token of ['actionbridge_executions', ".eq('user_id', user!.id)", 'safe_result', 'sanitizeActionBridgeVisibilityResult(value)', 'ACTIONBRIDGE_EXECUTIONS_LIST_FAILED']) {
+    if (!executionsRoute.includes(token)) fail(`executions route missing safe visibility token ${token}`);
+  }
+  if (auditRoute.includes('idempotency_key') || executionsRoute.includes('idempotency_key') || executionsRoute.includes('...result')) fail('visibility routes must not return raw idempotency keys or spread stored result JSON');
   if (!process.exitCode) pass('ActionBridge API routes are auth-gated and policy-driven');
 }
 
@@ -235,14 +261,18 @@ if (exists('src/frontend/app/api/actionbridge/execute/route.ts')) {
 
 if (exists('src/frontend/lib/actionbridge/http-connector.ts')) {
   const httpConnectorSecurity = read('src/frontend/lib/actionbridge/http-connector.ts');
-  for (const token of ['isPrivateActionBridgeHost', 'localhost', '127.', '10.', '172.', '192.168', '169.254']) {
-    if (!httpConnectorSecurity.includes(token)) fail(`HTTP connector missing SSRF/private-host guard marker: ${token}`);
+  const dnsIpGuardSecurity = read('src/frontend/lib/actionbridge/dns-ip-guard.ts');
+  for (const token of ['isActionBridgeBlockedHost', 'isActionBridgePrivateIpAddress']) {
+    if (!httpConnectorSecurity.includes(token)) fail(`HTTP connector must delegate SSRF/private-host guard to shared DNS/IP guard: ${token}`);
+  }
+  for (const token of ['localhost', '127.', '10.', '172.', '192.168', '169.254']) {
+    if (!dnsIpGuardSecurity.includes(token)) fail(`DNS/IP guard missing SSRF/private-host marker: ${token}`);
   }
   if (!httpConnectorSecurity.includes('AbortSignal.timeout')) fail('HTTP connector must use bounded request timeout before network execution');
   if (!httpConnectorSecurity.includes("redirect: 'manual'") && !httpConnectorSecurity.includes('redirect: "manual"')) {
     fail('HTTP connector must not auto-follow redirects');
   }
-  if (!process.exitCode) pass('ActionBridge HTTP connector includes SSRF, timeout, and redirect guardrails');
+  if (!process.exitCode) pass('ActionBridge HTTP connector delegates SSRF guard and keeps timeout/redirect guardrails');
 }
 
 
@@ -291,10 +321,10 @@ if (exists('src/frontend/lib/actionbridge/persistence.ts')) {
   for (const fn of ['consumeApprovedActionBridgeExecution', 'persistActionBridgeExecutionResult']) {
     if (!persistence.includes(fn)) fail(`persistence.ts missing execution state helper ${fn}`);
   }
-  for (const token of ['actionbridge_executions', 'idempotency_key', 'execution_id', 'approval_id', 'approved', 'executing', 'succeeded', 'failed']) {
-    if (!persistence.includes(token)) fail(`persistence.ts missing execution state token ${token}`);
+  for (const token of ['actionbridge_executions', 'idempotency_key', 'execution_id', 'approval_id', 'approved', 'executing', 'succeeded', 'failed', 'persistActionBridgeAuditEvent', 'executionResultPersisted']) {
+    if (!persistence.includes(token)) fail(`persistence.ts missing execution state/audit token ${token}`);
   }
-  if (!process.exitCode) pass('ActionBridge persistence supports consume-once execution state and idempotency');
+  if (!process.exitCode) pass('ActionBridge persistence supports consume-once execution state, idempotency, and final audit events');
 }
 
 if (exists('src/frontend/app/api/actionbridge/execute/route.ts')) {
@@ -363,10 +393,13 @@ if (migrationFiles.length) {
   if (migration.includes('dry_run_succeeded') || migration.includes('approval_consumed_without_network_execution')) {
     fail('ActionBridge migration must avoid ambiguous dry-run success/execution wording');
   }
-  if (migration.includes("'idempotencyKey', p_idempotency_key")) {
-    fail('ActionBridge migration audit summary must not store raw idempotency keys');
+  if (migration.includes("'idempotencyKey', p_idempotency_key") || migration.includes('idempotencyKeyPrefix') || migration.includes('left(p_idempotency_key')) {
+    fail('ActionBridge migration audit summary must not store raw idempotency keys or prefixes');
   }
-  if (!process.exitCode) pass('ActionBridge migration defines consume-once approval execution state and idempotency');
+  if (!migration.includes('idempotencyKeyDigest') || !migration.includes("digest(p_idempotency_key, 'sha256')")) {
+    fail('ActionBridge migration audit summary must store only idempotency key digest');
+  }
+  if (!process.exitCode) pass('ActionBridge migration defines consume-once approval execution state and digest-only idempotency audit');
 }
 
 process.exit(process.exitCode || 0);

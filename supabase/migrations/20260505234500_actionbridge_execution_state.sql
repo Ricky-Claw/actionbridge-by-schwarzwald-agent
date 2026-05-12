@@ -1,6 +1,7 @@
 -- ActionBridge execution state + idempotency guards
 -- Real connector/network execution remains disabled in application code.
 
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 ALTER TABLE public.actionbridge_connectors
   ADD COLUMN IF NOT EXISTS allowed_origins JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -157,7 +158,7 @@ BEGIN
     'allow',
     'pending',
     v_execution.redacted_input,
-    jsonb_build_object('approvalId', v_execution.approval_id, 'execution_id', v_execution.id, 'idempotencyKeyPrefix', left(p_idempotency_key, 8), 'networkExecution', false)
+    jsonb_build_object('approvalId', v_execution.approval_id, 'execution_id', v_execution.id, 'idempotencyKeyDigest', 'sha256:' || encode(digest(p_idempotency_key, 'sha256'), 'hex'), 'networkExecution', false)
   );
 
   RETURN QUERY SELECT

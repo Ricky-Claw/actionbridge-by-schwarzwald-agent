@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ActionBridgeDecision, ActionBridgeRiskLevel } from './types';
+import { actionBridgeAuditTaxonomy } from './audit-taxonomy';
 import { redactActionBridgeValue } from './redaction';
 
 interface ActionBridgePersistenceBase {
@@ -128,7 +129,7 @@ export async function persistActionBridgeExecutionResult(
   supabase: SupabaseClient,
   input: PersistActionBridgeExecutionResultInput
 ): Promise<{ error: string | null }> {
-  const { error } = await (supabase as any)
+  const { data, error } = await (supabase as any)
     .from('actionbridge_executions')
     .update({
       execution_status: input.status,
@@ -138,7 +139,42 @@ export async function persistActionBridgeExecutionResult(
     })
     .eq('user_id', input.userId)
     .eq('id', input.executionId)
-    .eq('approval_id', input.approvalId);
+    .eq('approval_id', input.approvalId)
+    .select('user_id,action_id,approval_id,action_name,risk_level,redacted_input,safe_result,error_code')
+    .single();
 
-  return { error: error?.message || null };
+  if (error || !data) return { error: error?.message || 'execution result update failed' };
+
+  const row = data as {
+    user_id: string;
+    action_id: string | null;
+    approval_id: string;
+    action_name: string;
+    risk_level: ActionBridgeRiskLevel;
+    redacted_input: unknown;
+    safe_result: Record<string, unknown> | null;
+    error_code: string | null;
+  };
+
+  const audit = await persistActionBridgeAuditEvent(supabase, {
+    userId: row.user_id,
+    actionId: row.action_id,
+    approvalId: row.approval_id,
+    actionName: row.action_name,
+    riskLevel: row.risk_level,
+    input: row.redacted_input || {},
+    decision: input.status === 'succeeded' ? 'allow' : 'deny',
+    status: input.status,
+    resultSummary: {
+      ...(row.safe_result || {}),
+      errorCode: row.error_code || undefined,
+      executionId: input.executionId,
+      auditCode: input.status === 'succeeded'
+        ? actionBridgeAuditTaxonomy.executionResultPersisted.code
+        : actionBridgeAuditTaxonomy.executionPersistFailed.code,
+      networkExecution: false,
+    },
+  });
+
+  return { error: audit.error };
 }

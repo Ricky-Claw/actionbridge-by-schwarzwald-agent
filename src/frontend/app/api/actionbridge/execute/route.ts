@@ -111,11 +111,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       decision: 'allow',
       status: 'policy_check_succeeded_without_execution',
+      operatorMessage: 'Approval consumed as a dry-run policy check. No network execution occurred.',
+      networkExecution: false,
       approvalId: consumed.execution.approvalId,
       executionId,
       idempotencyKeyDigest: summarizeIdempotencyKey(consumed.execution.idempotencyKey),
       reused: consumed.execution.reused,
-      result: safeResult,
+      result: { ...safeResult, networkExecution: false },
     });
   }
   const serverPolicy = await getServerActionBridgePolicy(supabase, user!.id, requestedActionName);
@@ -255,6 +257,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       decision: 'approval_required',
       reason: decision.reason,
+      operatorMessage: 'Approval queued. No external action has run.',
+      networkExecution: false,
       approval: { id: approval.id, status: 'pending', actionName, riskLevel },
       redactedInput,
     }, { status: 202 });
@@ -318,6 +322,7 @@ export async function POST(request: NextRequest) {
     decision: 'allow',
     reason: decision.reason,
     status: 'dry_run_noop',
+    operatorMessage: 'Dry run only. No request was sent to the connector target.',
     networkExecution: false,
     result: dryRunResult,
     redactedInput,

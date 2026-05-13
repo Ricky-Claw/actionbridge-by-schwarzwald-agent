@@ -24,6 +24,7 @@ const requiredFiles = [
   'src/frontend/lib/actionbridge/setup-profile.ts',
   'src/frontend/lib/actionbridge/tool-catalog.ts',
   'src/frontend/lib/actionbridge/schema-safety.ts',
+  'src/frontend/lib/actionbridge/read-only-executor.ts',
 ];
 
 for (const file of requiredFiles) {
@@ -130,12 +131,21 @@ if (!process.exitCode) {
     'decideActionBridgeNetworkExecutionControls',
     'killSwitchActive',
     'networkExecution: false',
-    'Network executor is not wired in this release',
+    'Read-only network executor gates passed.',
   ]) {
     if (!executionControls.includes(token)) fail(`execution-controls.ts missing ${token}`);
   }
   if (executionControls.includes('fetch(')) fail('execution-controls.ts must not perform network execution');
-  if (!process.exitCode) pass('ActionBridge execution controls include kill-switch scaffolding without enabling network execution');
+  if (!process.exitCode) pass('ActionBridge execution controls include kill-switch and read-only network gates');
+
+  const readOnlyExecutor = read('src/frontend/lib/actionbridge/read-only-executor.ts');
+  for (const token of ['executeActionBridgeReadOnlyGet', 'dns.lookup', 'decideActionBridgeDnsPinning', 'validateActionBridgeTarget', "method: 'GET'", "redirect: 'manual'", 'AbortSignal.timeout', 'enforceActionBridgeResponseByteLimit', 'redactActionBridgeValue']) {
+    if (!readOnlyExecutor.includes(token)) fail(`read-only-executor.ts missing ${token}`);
+  }
+  for (const forbidden of ["method: 'POST'", 'secretValue', 'form.submit', 'StealthyFetcher']) {
+    if (readOnlyExecutor.includes(forbidden)) fail(`read-only executor must not include ${forbidden}`);
+  }
+  if (!process.exitCode) pass('ActionBridge read-only executor enforces DNS, allowlist, timeout, redirects, limits, and redaction');
 
   const websiteConnector = read('src/frontend/lib/actionbridge/website-connector.ts');
   for (const token of ['server-only', 'createActionBridgeWebsiteExtractPlan', 'public_page_extract', 'same_origin_route_discovery', 'formInventory', 'no_form_submit', 'networkExecution: false', 'requiredExecutorGates', 'serverSideDnsPinning', 'robotsPolicy', 'browserNoWriteInterception', 'piiSecretRedaction', 'killSwitch']) {

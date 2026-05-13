@@ -10,12 +10,12 @@ export interface ActionBridgeExecutionControls {
 export interface ActionBridgeExecutionControlDecision {
   allowed: boolean;
   reason: string;
-  networkExecution: false;
+  networkExecution: boolean;
 }
 
 export function normalizeActionBridgeExecutionControls(
   connector: Pick<ActionBridgeConnector, 'networkExecutionEnabled' | 'safetyStatus' | 'permissionStatus'> | null | undefined,
-  killSwitchActive = true
+  killSwitchActive = process.env.ACTIONBRIDGE_READONLY_EXECUTION_KILL_SWITCH !== 'off'
 ): ActionBridgeExecutionControls {
   return {
     networkExecutionEnabled: connector?.networkExecutionEnabled === true,
@@ -41,7 +41,5 @@ export function decideActionBridgeNetworkExecutionControls(
     return { allowed: false, reason: 'Connector permission is not active.', networkExecution: false };
   }
 
-  // Stage-2 scaffolding only: this decision shape is ready for a future fetch executor,
-  // but still returns networkExecution:false until DNS pinning and egress controls are live.
-  return { allowed: false, reason: 'Network executor is not wired in this release.', networkExecution: false };
+  return { allowed: true, reason: 'Read-only network executor gates passed.', networkExecution: true };
 }

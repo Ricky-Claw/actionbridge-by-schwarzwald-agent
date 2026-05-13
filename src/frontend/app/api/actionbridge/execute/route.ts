@@ -13,6 +13,7 @@ import { validateActionBridgeTarget, type ActionBridgeTargetAllowlistEntry } fro
 import { decideActionBridgeNetworkExecutionControls, normalizeActionBridgeExecutionControls } from '@/lib/actionbridge/execution-controls';
 import { actionBridgeAuditTaxonomy } from '@/lib/actionbridge/audit-taxonomy';
 import { summarizeActionBridgeResponseLimitPolicy } from '@/lib/actionbridge/response-limits';
+import { executeActionBridgeReadOnlyGet } from '@/lib/actionbridge/read-only-executor';
 
 async function requireActionBridgeUser() {
   const supabase = await createClient();
@@ -129,12 +130,12 @@ export async function POST(request: NextRequest) {
   const { data: actionRecord } = actionId
     ? await supabase
       .from('actionbridge_actions')
-      .select('id,name,risk_level,enabled,connector_id')
+      .select('id,name,description,risk_level,input_schema,output_description,enabled,requires_approval,connector_id')
       .eq('user_id', user!.id)
       .eq('id', actionId)
       .maybeSingle()
     : { data: null };
-  const actionForPlan = actionRecord as { id?: string; name?: string; risk_level?: any; enabled?: boolean | null; connector_id?: string | null } | null;
+  const actionForPlan = actionRecord as { id?: string; name?: string; description?: string | null; risk_level?: any; input_schema?: any; output_description?: string | null; enabled?: boolean | null; requires_approval?: boolean | null; connector_id?: string | null } | null;
 
   const { data: connectorRecord } = actionForPlan?.connector_id
     ? await supabase
@@ -295,6 +296,51 @@ export async function POST(request: NextRequest) {
       executionControls: networkExecutionControlDecision,
       redactedInput,
     }, { status: 403 });
+  }
+
+  if (networkExecutionControlDecision.allowed && actionForPlan && connectorForPlan?.base_url) {
+    const readOnlyResult = await executeActionBridgeReadOnlyGet({
+      connector: {
+        id: connectorForPlan.id || '',
+        baseUrl: connectorForPlan.base_url,
+        enabled: connectorForPlan.enabled === true,
+        type: connectorForPlan.type || 'http',
+      },
+      action: {
+        id: actionForPlan.id || actionId || '',
+        name: actionForPlan.name || actionName,
+        riskLevel,
+        enabled: actionForPlan.enabled === true,
+      },
+      input: body.input || {},
+      path: requestedPath,
+      allowlist,
+    });
+
+    await persistActionBridgeAuditEvent(supabase, {
+      userId: user!.id,
+      actionId,
+      actionName,
+      riskLevel,
+      input: body.input || {},
+      decision: readOnlyResult.ok ? 'allow' : 'deny',
+      status: readOnlyResult.ok ? 'succeeded' : 'denied',
+      resultSummary: {
+        ...readOnlyResult.resultSummary,
+        executionControls: networkExecutionControlDecision,
+        responseLimits: summarizeActionBridgeResponseLimitPolicy(),
+      },
+    });
+
+    return NextResponse.json({
+      decision: readOnlyResult.ok ? 'allow' : 'deny',
+      reason: readOnlyResult.ok ? decision.reason : String(readOnlyResult.resultSummary.reason || 'Read-only execution failed.'),
+      status: readOnlyResult.ok ? 'read_only_executed' : 'read_only_blocked',
+      operatorMessage: 'Read-only GET execution path. No writes, forms, browser/RPA, redirects, or credentials used.',
+      networkExecution: readOnlyResult.networkExecution,
+      result: readOnlyResult.resultSummary,
+      redactedInput: readOnlyResult.redactedInput,
+    }, { status: readOnlyResult.ok ? 200 : readOnlyResult.status });
   }
 
   const dryRunResult = {

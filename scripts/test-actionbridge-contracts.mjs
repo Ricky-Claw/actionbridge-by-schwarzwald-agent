@@ -26,6 +26,7 @@ const requiredFiles = [
   'src/frontend/lib/actionbridge/schema-safety.ts',
   'src/frontend/lib/actionbridge/read-only-executor.ts',
   'src/frontend/lib/actionbridge/domain-verification.ts',
+  'src/frontend/lib/actionbridge/setup-links.ts',
 ];
 
 for (const file of requiredFiles) {
@@ -148,6 +149,13 @@ if (!process.exitCode) {
   }
   if (!process.exitCode) pass('ActionBridge read-only executor enforces DNS, allowlist, timeout, redirects, limits, and redaction');
 
+  const setupLinks = read('src/frontend/lib/actionbridge/setup-links.ts');
+  for (const token of ['createActionBridgeSetupLinkDraft', 'digestActionBridgeSetupLinkToken', 'normalizeActionBridgeSetupLinkOrigin', 'absl_', 'tokenDigest', 'isPrivateActionBridgeHost']) {
+    if (!setupLinks.includes(token)) fail(`setup-links.ts missing ${token}`);
+  }
+  if (setupLinks.includes('fetch(')) fail('setup-links.ts must not perform network execution');
+  if (!process.exitCode) pass('ActionBridge setup links generate digest-only customer setup tokens');
+
   const domainVerification = read('src/frontend/lib/actionbridge/domain-verification.ts');
   for (const token of ['createActionBridgeVerificationChallenge', 'verifyActionBridgeDomainChallenge', 'human_attestation', 'well_known', 'meta_tag', 'dns_txt', 'actionbridge-verification=', 'dns.resolveTxt', 'redirect: \'manual\'', 'AbortSignal.timeout']) {
     if (!domainVerification.includes(token)) fail(`domain-verification.ts missing ${token}`);
@@ -211,6 +219,7 @@ const routeFiles = [
   'src/frontend/app/api/actionbridge/setup-profile/route.ts',
   'src/frontend/app/api/actionbridge/tool-catalog/route.ts',
   'src/frontend/app/api/actionbridge/connectors/verify/route.ts',
+  'src/frontend/app/api/actionbridge/setup-links/route.ts',
 ];
 for (const file of routeFiles) {
   if (!exists(file)) fail(`Missing ActionBridge route: ${file}`);
@@ -227,6 +236,7 @@ if (!process.exitCode) {
   const setupProfileRoute = read('src/frontend/app/api/actionbridge/setup-profile/route.ts');
   const toolCatalogRoute = read('src/frontend/app/api/actionbridge/tool-catalog/route.ts');
   const connectorVerifyRoute = read('src/frontend/app/api/actionbridge/connectors/verify/route.ts');
+  const setupLinksRoute = read('src/frontend/app/api/actionbridge/setup-links/route.ts');
   for (const [name, source] of [['actions', actionsRoute], ['connectors', connectorsRoute], ['execute', executeRoute], ['approvals', approvalsRoute], ['audit', auditRoute], ['executions', executionsRoute]]) {
     if (!source.includes('createClient')) fail(`${name} route must use Supabase server auth`);
     if (!source.includes('auth.getUser')) fail(`${name} route must require authenticated user`);
@@ -278,6 +288,10 @@ if (!process.exitCode) {
     if (!toolCatalogRoute.includes(token)) fail(`tool-catalog route missing ${token}`);
   }
   if (toolCatalogRoute.includes('secret_ref') || toolCatalogRoute.includes('base_url') || toolCatalogRoute.includes('idempotency_key')) fail('tool-catalog route must not select/expose secrets, base URLs, or idempotency keys');
+  for (const token of ['actionbridge_setup_links', 'createActionBridgeSetupLinkDraft', 'token_digest', 'target_origin', 'allowed_methods', ".eq('user_id', user!.id)", 'auth.getUser', 'UNAUTHORIZED']) {
+    if (!setupLinksRoute.includes(token)) fail(`setup-links route missing ${token}`);
+  }
+  if (setupLinksRoute.includes('token_digest,') || setupLinksRoute.includes('token_digest)')) fail('setup-links route must not select/return token_digest');
   for (const token of ['actionbridge_connector_verifications', 'createActionBridgeVerificationChallenge', 'verifyActionBridgeDomainChallenge', 'digestActionBridgeVerificationToken', 'network_execution_enabled: true', "safety_status: 'pass'", "permission_status: 'active'", ".eq('user_id', user!.id)"]) {
     if (!connectorVerifyRoute.includes(token)) fail(`connector verification route missing ${token}`);
   }
@@ -445,6 +459,10 @@ if (exists('src/frontend/app/api/actionbridge/connectors/route.ts')) {
 if (migrationFiles.length) {
   const migration = migrationFiles.map((name) => read(`supabase/migrations/${name}`)).join('\n');
   for (const token of [
+    'actionbridge_setup_links',
+    "status IN ('pending', 'opened', 'completed', 'revoked', 'expired')",
+    'token_digest TEXT NOT NULL',
+    'actionbridge_setup_links_owner_select',
     'actionbridge_connector_verifications',
     "method IN ('human_attestation', 'well_known', 'meta_tag', 'dns_txt')",
     "status IN ('pending', 'verified', 'failed', 'revoked')",

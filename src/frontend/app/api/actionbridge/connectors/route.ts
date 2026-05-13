@@ -47,11 +47,12 @@ function parseActionBridgeConnectorDraft(body: Record<string, unknown>) {
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   const type = typeof body.type === 'string' && ACTIONBRIDGE_CONNECTOR_TYPES.has(body.type) ? body.type : 'http';
   const baseUrl = typeof body.baseUrl === 'string' ? body.baseUrl : typeof body.base_url === 'string' ? body.base_url : '';
-  const authMode = typeof body.authMode === 'string' && ACTIONBRIDGE_AUTH_MODES.has(body.authMode)
+  const requestedAuthMode = typeof body.authMode === 'string' && ACTIONBRIDGE_AUTH_MODES.has(body.authMode)
     ? body.authMode
     : typeof body.auth_mode === 'string' && ACTIONBRIDGE_AUTH_MODES.has(body.auth_mode)
       ? body.auth_mode
       : 'none';
+  const authMode = type === 'website' ? 'none' : requestedAuthMode;
 
   if (!name || !baseUrl) return null;
 
@@ -66,7 +67,9 @@ function parseActionBridgeConnectorDraft(body: Record<string, unknown>) {
   if (parsedUrl.username || parsedUrl.password) return null;
   if (isPrivateActionBridgeHost(parsedUrl.hostname)) return null;
 
-  const allowedOrigins = normalizeActionBridgeAllowedOrigins(body.allowedOrigins ?? body.allowed_origins);
+  const allowedOrigins = normalizeActionBridgeAllowedOrigins(
+    body.allowedOrigins ?? body.allowed_origins ?? (type === 'website' ? [parsedUrl.origin] : undefined)
+  );
   if (!allowedOrigins) return null;
 
   return {

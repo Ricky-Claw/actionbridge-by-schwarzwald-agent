@@ -113,6 +113,28 @@ for (const [label, origins, expectedCount] of [
   else fail(`server allowlist parse failed: ${label}`, `expected count=${expectedCount}, got ${parsed.length}`);
 }
 
+function normalizeSetupProfileUrl(value) {
+  if (typeof value !== 'string') return null;
+  let parsedUrl;
+  try { parsedUrl = new URL(value); } catch { return null; }
+  if (parsedUrl.protocol !== 'https:') return null;
+  if (parsedUrl.username || parsedUrl.password) return null;
+  if (isPrivateActionBridgeHost(parsedUrl.hostname)) return null;
+  return parsedUrl;
+}
+for (const [label, url, expectedOk] of [
+  ['setup rejects http', 'http://api.example.com', false],
+  ['setup rejects localhost confusion', 'https://api.example.com@localhost', false],
+  ['setup rejects userinfo token', 'https://token@api.example.com', false],
+  ['setup allows HTTPS path but strips no secrets into origins', 'https://api.example.com/path?token=x', true],
+  ['setup rejects scheme-relative', '//evil.test', false],
+  ['setup rejects javascript scheme', 'javascript:alert(1)', false],
+]) {
+  const normalized = normalizeSetupProfileUrl(url);
+  if (Boolean(normalized) === expectedOk) pass(`setup profile URL guard: ${label}`, `ok=${Boolean(normalized)} target=${normalized?.toString() || 'blocked'}`);
+  else fail(`setup profile URL guard failed: ${label}`, `expected ok=${expectedOk}, got ok=${Boolean(normalized)}`);
+}
+
 const sourceFiles = [
   'src/frontend/lib/actionbridge/http-connector.ts',
   'src/frontend/lib/actionbridge/target-validation.ts',

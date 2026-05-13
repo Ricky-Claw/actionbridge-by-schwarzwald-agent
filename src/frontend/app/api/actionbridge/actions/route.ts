@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import type { ActionBridgeRiskLevel } from '@/lib/actionbridge/types';
 import { redactActionBridgeValue } from '@/lib/actionbridge/redaction';
 import { createCoreServiceClient } from '@/lib/core/service-client';
+import { sanitizeActionBridgeInputSchema, sanitizeActionBridgeSchemaName, sanitizeActionBridgeSchemaText } from '@/lib/actionbridge/schema-safety';
 
 const ACTIONBRIDGE_RISK_LEVELS = new Set<ActionBridgeRiskLevel>(['read', 'write', 'transactional', 'destructive']);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -18,47 +19,19 @@ async function requireActionBridgeUser() {
   return { supabase, user, response: null };
 }
 
-function normalizeActionBridgeText(value: unknown, maxLength: number): string | null {
-  if (value === undefined || value === null) return '';
-  if (typeof value !== 'string') return null;
-  const text = value.trim();
-  if (text.length > maxLength) return null;
-  return text;
-}
-
-function parseActionBridgeInputSchema(value: unknown) {
-  if (value === undefined || value === null) return [];
-  if (!Array.isArray(value) || value.length > 20) return null;
-
-  return value.map((field) => {
-    if (!field || typeof field !== 'object' || Array.isArray(field)) return null;
-    const candidate = field as Record<string, unknown>;
-    const name = normalizeActionBridgeText(candidate.name, 80);
-    const description = normalizeActionBridgeText(candidate.description, 300);
-    const type = candidate.type;
-    const required = candidate.required;
-
-    if (!name || description === null) return null;
-    if (type !== 'string' && type !== 'number' && type !== 'boolean' && type !== 'object' && type !== 'array') return null;
-    if (typeof required !== 'boolean') return null;
-
-    return { name, type, required, description: description || '' };
-  });
-}
-
 function parseActionBridgeActionDraft(body: Record<string, unknown>) {
-  const name = normalizeActionBridgeText(body.name, 80);
+  const name = sanitizeActionBridgeSchemaName(body.name, 80);
   const connectorId = typeof body.connectorId === 'string'
     ? body.connectorId.trim()
     : typeof body.connector_id === 'string'
       ? body.connector_id.trim()
       : '';
-  const description = normalizeActionBridgeText(body.description, 500);
-  const outputDescription = normalizeActionBridgeText(body.outputDescription ?? body.output_description, 500);
-  const inputSchema = parseActionBridgeInputSchema(body.inputSchema ?? body.input_schema);
+  const description = sanitizeActionBridgeSchemaText(body.description, 500);
+  const outputDescription = sanitizeActionBridgeSchemaText(body.outputDescription ?? body.output_description, 500);
+  const inputSchema = sanitizeActionBridgeInputSchema(body.inputSchema ?? body.input_schema);
   const riskLevel: ActionBridgeRiskLevel = 'write';
 
-  if (!name || !connectorId || !UUID_PATTERN.test(connectorId) || description === null || outputDescription === null || !inputSchema || inputSchema.includes(null)) return null;
+  if (!name || !connectorId || !UUID_PATTERN.test(connectorId) || description === null || outputDescription === null || !inputSchema) return null;
 
   return {
     connector_id: connectorId,

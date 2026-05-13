@@ -21,6 +21,9 @@ const requiredFiles = [
   'src/frontend/lib/actionbridge/audit-taxonomy.ts',
   'src/frontend/lib/actionbridge/website-connector.ts',
   'src/frontend/lib/actionbridge/website-extraction-guards.ts',
+  'src/frontend/lib/actionbridge/setup-profile.ts',
+  'src/frontend/lib/actionbridge/tool-catalog.ts',
+  'src/frontend/lib/actionbridge/schema-safety.ts',
 ];
 
 for (const file of requiredFiles) {
@@ -147,6 +150,25 @@ if (!process.exitCode) {
   if (websiteExtractionGuards.includes('fetch(') || websiteExtractionGuards.includes('StealthyFetcher')) fail('website extraction guards must not perform network/browser execution');
   if (!process.exitCode) pass('ActionBridge website connector defines safe public extraction plan and release gates without live execution');
 
+  const schemaSafety = read('src/frontend/lib/actionbridge/schema-safety.ts');
+  for (const token of ['sanitizeActionBridgeSchemaName', 'sanitizeActionBridgeSchemaText', 'sanitizeActionBridgeInputSchema', 'PROMPT_INJECTION_PATTERNS', 'bypass\\s+(policy|approval|guardrails?)']) {
+    if (!schemaSafety.includes(token)) fail(`schema-safety.ts missing ${token}`);
+  }
+  if (!process.exitCode) pass('ActionBridge schema safety blocks prompt-like schema poisoning');
+
+  const setupProfile = read('src/frontend/lib/actionbridge/setup-profile.ts');
+  for (const token of ['normalizeActionBridgeSetupProfile', 'networkExecutionEnabled: false', "safetyStatus: 'untested'", "permissionStatus: 'draft'", "authMode: 'none'", 'isPrivateActionBridgeHost', 'suggestedActions']) {
+    if (!setupProfile.includes(token)) fail(`setup-profile.ts missing ${token}`);
+  }
+  if (setupProfile.includes('fetch(') || setupProfile.includes('StealthyFetcher')) fail('setup profile must not perform live network/browser execution');
+
+  const toolCatalog = read('src/frontend/lib/actionbridge/tool-catalog.ts');
+  for (const token of ['createActionBridgeWidgetToolCatalog', "version: 'actionbridge.catalog.v1'", 'inputSchema', 'riskLevel', 'requiresApproval', 'networkExecution: false']) {
+    if (!toolCatalog.includes(token)) fail(`tool-catalog.ts missing ${token}`);
+  }
+  if (toolCatalog.includes('secretRef') || toolCatalog.includes('secret_ref') || toolCatalog.includes('secretValue') || toolCatalog.includes('idempotency_key')) fail('tool catalog must not expose secrets or raw idempotency fields');
+  if (!process.exitCode) pass('ActionBridge setup profile and widget tool catalog are dry-run and agent-safe');
+
   const responseLimits = read('src/frontend/lib/actionbridge/response-limits.ts');
   for (const token of ['defaultActionBridgeResponseLimitPolicy', 'maxBytes', 'maxJsonDepth', 'maxArrayItems', 'maxObjectKeys', 'enforceActionBridgeResponseByteLimit']) {
     if (!responseLimits.includes(token)) fail(`response-limits.ts missing ${token}`);
@@ -168,6 +190,8 @@ const routeFiles = [
   'src/frontend/app/api/actionbridge/approvals/route.ts',
   'src/frontend/app/api/actionbridge/audit/route.ts',
   'src/frontend/app/api/actionbridge/executions/route.ts',
+  'src/frontend/app/api/actionbridge/setup-profile/route.ts',
+  'src/frontend/app/api/actionbridge/tool-catalog/route.ts',
 ];
 for (const file of routeFiles) {
   if (!exists(file)) fail(`Missing ActionBridge route: ${file}`);
@@ -181,6 +205,8 @@ if (!process.exitCode) {
   const approvalsRoute = read('src/frontend/app/api/actionbridge/approvals/route.ts');
   const auditRoute = read('src/frontend/app/api/actionbridge/audit/route.ts');
   const executionsRoute = read('src/frontend/app/api/actionbridge/executions/route.ts');
+  const setupProfileRoute = read('src/frontend/app/api/actionbridge/setup-profile/route.ts');
+  const toolCatalogRoute = read('src/frontend/app/api/actionbridge/tool-catalog/route.ts');
   for (const [name, source] of [['actions', actionsRoute], ['connectors', connectorsRoute], ['execute', executeRoute], ['approvals', approvalsRoute], ['audit', auditRoute], ['executions', executionsRoute]]) {
     if (!source.includes('createClient')) fail(`${name} route must use Supabase server auth`);
     if (!source.includes('auth.getUser')) fail(`${name} route must require authenticated user`);
@@ -193,12 +219,15 @@ if (!process.exitCode) {
   if (!connectorsRoute.includes("new Set(['http', 'website'])")) fail('connectors route must allow website connector type');
   if (!connectorsRoute.includes('public_page_extract') || !connectorsRoute.includes('no_form_submit')) fail('website connectors must persist public extraction guardrail capabilities');
   if (!connectorsRoute.includes('parsedUrl.username') || !connectorsRoute.includes('parsedUrl.password')) fail('connectors route must reject URL userinfo secrets');
+  if (!connectorsRoute.includes("const authMode = type === 'website' ? 'none'")) fail('website connectors must force auth_mode none');
+  if (!connectorsRoute.includes("type === 'website' ? [parsedUrl.origin]")) fail('website connectors must default allowed origins to own origin');
   if (connectorsRoute.includes('secret_ref:') && !connectorsRoute.includes('ACTIONBRIDGE_SECRET_STORAGE_NOT_CONFIGURED')) fail('connectors route must not accept client-supplied secret_ref');
   if (!connectorsRoute.includes('redactActionBridgeValue')) fail('connectors route must redact invalid connector payloads');
   if (actionsRoute.includes('demoActions')) fail('actions route must not serve demo-only actions');
   if (!actionsRoute.includes('actionbridge_actions')) fail('actions route must persist/list actionbridge_actions');
   if (!actionsRoute.includes(".eq('user_id', user!.id)")) fail('actions route must scope action reads/writes to authenticated owner');
   if (!actionsRoute.includes('ACTIONBRIDGE_ACTION_CREATE_FAILED')) fail('actions route must fail closed on action creation errors');
+  if (!actionsRoute.includes('sanitizeActionBridgeSchemaName') || !actionsRoute.includes('sanitizeActionBridgeSchemaText') || !actionsRoute.includes('sanitizeActionBridgeInputSchema')) fail('actions route must sanitize action schemas against poisoning');
   if (actionsRoute.includes('requiresApproval ===')) fail('actions route must not trust client-controlled requiresApproval');
   if (actionsRoute.includes('requires_approval ===')) fail('actions route must not trust client-controlled requires_approval');
   if (!actionsRoute.includes("ActionBridgeRiskLevel = 'write'") && !actionsRoute.includes("riskLevel: 'write'")) fail('actions route must default client-created actions to write risk');
@@ -222,6 +251,13 @@ if (!process.exitCode) {
     if (!executionsRoute.includes(token)) fail(`executions route missing safe visibility token ${token}`);
   }
   if (auditRoute.includes('idempotency_key') || executionsRoute.includes('idempotency_key') || executionsRoute.includes('...result')) fail('visibility routes must not return raw idempotency keys or spread stored result JSON');
+  for (const token of ['normalizeActionBridgeSetupProfile', 'ACTIONBRIDGE_SECRET_STORAGE_NOT_CONFIGURED', 'INVALID_ACTIONBRIDGE_SETUP_PROFILE']) {
+    if (!setupProfileRoute.includes(token)) fail(`setup-profile route missing ${token}`);
+  }
+  for (const token of ['createActionBridgeWidgetToolCatalogs', 'actionbridge_connectors', 'actionbridge_actions', ".eq('user_id', user!.id)", "version: 'actionbridge.catalog.v1'", 'networkExecution: false']) {
+    if (!toolCatalogRoute.includes(token)) fail(`tool-catalog route missing ${token}`);
+  }
+  if (toolCatalogRoute.includes('secret_ref') || toolCatalogRoute.includes('base_url') || toolCatalogRoute.includes('idempotency_key')) fail('tool-catalog route must not select/expose secrets, base URLs, or idempotency keys');
   if (!process.exitCode) pass('ActionBridge API routes are auth-gated and policy-driven');
 }
 

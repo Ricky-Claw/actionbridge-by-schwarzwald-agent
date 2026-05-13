@@ -19,6 +19,8 @@ const requiredFiles = [
   'src/frontend/lib/actionbridge/execution-controls.ts',
   'src/frontend/lib/actionbridge/response-limits.ts',
   'src/frontend/lib/actionbridge/audit-taxonomy.ts',
+  'src/frontend/lib/actionbridge/website-connector.ts',
+  'src/frontend/lib/actionbridge/website-extraction-guards.ts',
 ];
 
 for (const file of requiredFiles) {
@@ -132,6 +134,19 @@ if (!process.exitCode) {
   if (executionControls.includes('fetch(')) fail('execution-controls.ts must not perform network execution');
   if (!process.exitCode) pass('ActionBridge execution controls include kill-switch scaffolding without enabling network execution');
 
+  const websiteConnector = read('src/frontend/lib/actionbridge/website-connector.ts');
+  for (const token of ['server-only', 'createActionBridgeWebsiteExtractPlan', 'public_page_extract', 'same_origin_route_discovery', 'formInventory', 'no_form_submit', 'networkExecution: false', 'requiredExecutorGates', 'serverSideDnsPinning', 'robotsPolicy', 'browserNoWriteInterception', 'piiSecretRedaction', 'killSwitch']) {
+    if (!websiteConnector.includes(token)) fail(`website-connector.ts missing ${token}`);
+  }
+  if (websiteConnector.includes('fetch(') || websiteConnector.includes('StealthyFetcher') || websiteConnector.includes('form.submit')) fail('website connector contract must not wire live network/browser execution in this release');
+
+  const websiteExtractionGuards = read('src/frontend/lib/actionbridge/website-extraction-guards.ts');
+  for (const token of ['decideActionBridgeWebsiteRobotsPolicy', 'decideActionBridgeWebsiteNoWritePolicy', 'sanitizeActionBridgeWebsitePageProfile', 'rawHtmlReturned: false', 'rawJavaScriptReturned: false', 'Website connector blocks write-capable HTTP methods', 'robots.txt does not allow']) {
+    if (!websiteExtractionGuards.includes(token)) fail(`website-extraction-guards.ts missing ${token}`);
+  }
+  if (websiteExtractionGuards.includes('fetch(') || websiteExtractionGuards.includes('StealthyFetcher')) fail('website extraction guards must not perform network/browser execution');
+  if (!process.exitCode) pass('ActionBridge website connector defines safe public extraction plan and release gates without live execution');
+
   const responseLimits = read('src/frontend/lib/actionbridge/response-limits.ts');
   for (const token of ['defaultActionBridgeResponseLimitPolicy', 'maxBytes', 'maxJsonDepth', 'maxArrayItems', 'maxObjectKeys', 'enforceActionBridgeResponseByteLimit']) {
     if (!responseLimits.includes(token)) fail(`response-limits.ts missing ${token}`);
@@ -175,6 +190,8 @@ if (!process.exitCode) {
   if (!connectorsRoute.includes(".eq('user_id', user!.id)")) fail('connectors route must scope reads to authenticated owner');
   if (!connectorsRoute.includes('createCoreServiceClient')) fail('connectors route must use server-only service client for connector creation');
   if (!connectorsRoute.includes('ACTIONBRIDGE_CONNECTOR_CREATE_FAILED')) fail('connectors route must fail closed on connector creation errors');
+  if (!connectorsRoute.includes("new Set(['http', 'website'])")) fail('connectors route must allow website connector type');
+  if (!connectorsRoute.includes('public_page_extract') || !connectorsRoute.includes('no_form_submit')) fail('website connectors must persist public extraction guardrail capabilities');
   if (!connectorsRoute.includes('parsedUrl.username') || !connectorsRoute.includes('parsedUrl.password')) fail('connectors route must reject URL userinfo secrets');
   if (connectorsRoute.includes('secret_ref:') && !connectorsRoute.includes('ACTIONBRIDGE_SECRET_STORAGE_NOT_CONFIGURED')) fail('connectors route must not accept client-supplied secret_ref');
   if (!connectorsRoute.includes('redactActionBridgeValue')) fail('connectors route must redact invalid connector payloads');
@@ -191,6 +208,7 @@ if (!process.exitCode) {
   if (!executeRoute.includes('decideActionBridgePolicy')) fail('execute route must call policy decision layer');
   if (!executeRoute.includes('approval_required')) fail('execute route must support approval_required decision');
   if (!executeRoute.includes('redactActionBridgeValue')) fail('execute route must redact inputs before returning/logging');
+  if (!executeRoute.includes("type: connectorForPlan.type || 'http'")) fail('execute route must pass connector type into execution planning');
   if (!approvalsRoute.includes('export async function POST')) fail('approvals route must support approve/reject decisions');
   if (!approvalsRoute.includes('action_snapshot') || !approvalsRoute.includes('connector_id')) fail('approvals route must expose immutable approval snapshot fields');
   if (!approvalsRoute.includes('p_user_id: user!.id')) fail('approvals route must scope decisions to authenticated owner');
@@ -224,6 +242,7 @@ if (!migrationFiles.length) {
   }
   if (!migration.toLowerCase().includes('enable row level security')) fail('ActionBridge migration must enable RLS');
   if (!migration.includes('auth.uid()')) fail('ActionBridge migration policies must scope to auth.uid()');
+  if (!migration.includes("type IN ('http', 'website')")) fail('ActionBridge migration must support website connector type');
   if (!migration.includes('redacted_input')) fail('ActionBridge audit log must use redacted_input, not raw secrets');
   if (migration.includes('CREATE POLICY actionbridge_approvals_owner_all')) fail('ActionBridge approvals must not expose direct owner FOR ALL mutations');
   if (migration.includes('CREATE POLICY actionbridge_connectors_owner_all')) fail('ActionBridge connectors must not expose direct owner FOR ALL mutations');
@@ -334,7 +353,7 @@ if (exists('src/frontend/app/api/actionbridge/execute/route.ts')) {
   for (const token of ['approvalId', 'idempotencyKey', 'consumeApprovedActionBridgeExecution', 'persistActionBridgeExecutionResult', 'executionId', 'ACTIONBRIDGE_APPROVAL_NOT_EXECUTABLE', 'ACTIONBRIDGE_EXECUTION_RESULT_PERSIST_FAILED', 'dry_run_noop', 'networkExecution: false']) {
     if (!executeRouteState.includes(token)) fail(`execute route missing execution state/idempotency token ${token}`);
   }
-  for (const token of ['createActionBridgeExecutionPlan', 'validateActionBridgeTarget', 'parseServerActionBridgeAllowlist', 'policy_check_succeeded_without_execution', 'decideActionBridgeNetworkExecutionControls', 'summarizeActionBridgeResponseLimitPolicy', 'actionBridgeAuditTaxonomy']) {
+  for (const token of ['createActionBridgeExecutionPlan', 'validateActionBridgeTarget', 'parseServerActionBridgeAllowlist', 'policy_check_succeeded_without_execution', 'decideActionBridgeNetworkExecutionControls', 'summarizeActionBridgeResponseLimitPolicy', 'actionBridgeAuditTaxonomy', "type: connectorForPlan.type || 'http'"]) {
     if (!executeRouteState.includes(token)) fail(`execute route missing dry-run planner guard ${token}`);
   }
   if (executeRouteState.includes('body.allowlist')) {

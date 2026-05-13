@@ -6,7 +6,7 @@ import { redactActionBridgeValue } from '@/lib/actionbridge/redaction';
 import { createCoreServiceClient } from '@/lib/core/service-client';
 import { isPrivateActionBridgeHost } from '@/lib/actionbridge/http-connector';
 
-const ACTIONBRIDGE_CONNECTOR_TYPES = new Set(['http']);
+const ACTIONBRIDGE_CONNECTOR_TYPES = new Set(['http', 'website']);
 const ACTIONBRIDGE_AUTH_MODES = new Set(['none', 'bearer', 'api_key', 'basic']);
 
 function normalizeActionBridgeAllowedOrigins(value: unknown): string[] | null {
@@ -77,7 +77,9 @@ function parseActionBridgeConnectorDraft(body: Record<string, unknown>) {
     secret_ref: null,
     enabled: typeof body.enabled === 'boolean' ? body.enabled : true,
     allowed_origins: allowedOrigins,
-    capabilities: [],
+    capabilities: type === 'website'
+      ? ['public_page_extract', 'same_origin_route_discovery', 'metadata_extract', 'form_inventory', 'no_form_submit', 'networkExecution:false']
+      : [],
     network_execution_enabled: false,
     safety_status: 'untested',
     permission_status: 'draft',

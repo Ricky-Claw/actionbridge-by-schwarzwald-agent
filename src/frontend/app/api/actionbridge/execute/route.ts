@@ -139,12 +139,12 @@ export async function POST(request: NextRequest) {
   const { data: connectorRecord } = actionForPlan?.connector_id
     ? await supabase
       .from('actionbridge_connectors')
-      .select('id,base_url,enabled,allowed_origins,capabilities,network_execution_enabled,safety_status,permission_status')
+      .select('id,type,base_url,enabled,allowed_origins,capabilities,network_execution_enabled,safety_status,permission_status')
       .eq('user_id', user!.id)
       .eq('id', actionForPlan.connector_id)
       .maybeSingle()
     : { data: null };
-  const connectorForPlan = connectorRecord as { id?: string; base_url?: string; enabled?: boolean | null; allowed_origins?: unknown; capabilities?: unknown; network_execution_enabled?: boolean | null; safety_status?: string | null; permission_status?: string | null } | null;
+  const connectorForPlan = connectorRecord as { id?: string; type?: 'http' | 'website' | null; base_url?: string; enabled?: boolean | null; allowed_origins?: unknown; capabilities?: unknown; network_execution_enabled?: boolean | null; safety_status?: string | null; permission_status?: string | null } | null;
   const allowlist = parseServerActionBridgeAllowlist(connectorForPlan?.allowed_origins);
   const networkExecutionControls = normalizeActionBridgeExecutionControls({
     networkExecutionEnabled: connectorForPlan?.network_execution_enabled === true,
@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
 
   const executionPlan = actionForPlan && connectorForPlan?.base_url
     ? createActionBridgeExecutionPlan({
-      connector: { baseUrl: connectorForPlan.base_url, enabled: connectorForPlan.enabled === true },
+      connector: { baseUrl: connectorForPlan.base_url, enabled: connectorForPlan.enabled === true, type: connectorForPlan.type || 'http' },
       action: { id: actionForPlan.id || actionId || '', name: actionForPlan.name || actionName, riskLevel, enabled: actionForPlan.enabled === true },
       input: body.input || {},
       path: requestedPath,

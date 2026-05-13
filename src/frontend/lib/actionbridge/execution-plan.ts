@@ -1,9 +1,10 @@
 import type { ActionBridgeActionDefinition, ActionBridgeConnector } from './types';
 import { redactActionBridgeValue } from './redaction';
 import { validateActionBridgeTarget, type ActionBridgeTargetAllowlistEntry } from './target-validation';
+import { createActionBridgeWebsiteExtractPlan } from './website-connector';
 
 export interface CreateActionBridgeExecutionPlanInput {
-  connector: Pick<ActionBridgeConnector, 'baseUrl' | 'enabled'>;
+  connector: Pick<ActionBridgeConnector, 'baseUrl' | 'enabled' | 'type'>;
   action: Pick<ActionBridgeActionDefinition, 'id' | 'name' | 'riskLevel' | 'enabled'>;
   input: Record<string, unknown>;
   path?: string;
@@ -41,6 +42,15 @@ export function createActionBridgeExecutionPlan(
     allowlist: input.allowlist,
   });
   const redactedInput = redactActionBridgeValue(input.input);
+  const websitePlan = input.connector.type === 'website'
+    ? createActionBridgeWebsiteExtractPlan({
+      connector: input.connector,
+      path: input.path,
+      allowlist: input.allowlist,
+      maxPages: typeof input.input.maxPages === 'number' ? input.input.maxPages : undefined,
+      maxBytes: typeof input.input.maxBytes === 'number' ? input.input.maxBytes : undefined,
+    })
+    : null;
   const executable = input.connector.enabled && input.action.enabled && classification.readOnly && target.ok;
 
   return {
@@ -58,6 +68,7 @@ export function createActionBridgeExecutionPlan(
       readOnly: classification.readOnly,
       requiresApproval: classification.requiresApproval,
       targetHostname: target.hostname,
+      websiteExtractPlan: websitePlan,
       networkExecution: false,
     }) as Record<string, unknown>,
   };

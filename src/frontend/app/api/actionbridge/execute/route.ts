@@ -216,6 +216,7 @@ export async function POST(request: NextRequest) {
     const approval = await createActionBridgeApproval(serviceSupabase, {
       userId: user!.id,
       actionId,
+      connectorId: actionForPlan?.connector_id || null,
       actionName,
       riskLevel,
       input: body.input || {},

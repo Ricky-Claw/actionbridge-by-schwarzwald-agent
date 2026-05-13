@@ -21,6 +21,23 @@ ALTER TABLE public.actionbridge_connectors
   CHECK (permission_status IN ('draft', 'active', 'paused', 'revoked'));
 
 ALTER TABLE public.actionbridge_approvals
+  ADD COLUMN IF NOT EXISTS connector_id UUID,
+  ADD COLUMN IF NOT EXISTS action_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'actionbridge_approvals_connector_owner_fk'
+      AND conrelid = 'public.actionbridge_approvals'::regclass
+  ) THEN
+    ALTER TABLE public.actionbridge_approvals
+      ADD CONSTRAINT actionbridge_approvals_connector_owner_fk
+      FOREIGN KEY (connector_id, user_id) REFERENCES public.actionbridge_connectors(id, user_id) ON DELETE RESTRICT;
+  END IF;
+END $$;
+
+ALTER TABLE public.actionbridge_approvals
   DROP CONSTRAINT IF EXISTS actionbridge_approvals_status_check;
 
 ALTER TABLE public.actionbridge_approvals
@@ -136,7 +153,12 @@ BEGIN
     p_idempotency_key,
     'executing',
     v_approval.redacted_input,
-    jsonb_build_object('status', 'dry_run_noop', 'mode', 'policy_check_succeeded_without_execution', 'networkExecution', false)
+    jsonb_build_object(
+      'status', 'dry_run_noop',
+      'mode', 'policy_check_succeeded_without_execution',
+      'approvalSnapshot', v_approval.action_snapshot,
+      'networkExecution', false
+    )
   ) RETURNING * INTO v_execution;
 
   INSERT INTO public.actionbridge_audit_logs (
@@ -158,7 +180,7 @@ BEGIN
     'allow',
     'pending',
     v_execution.redacted_input,
-    jsonb_build_object('approvalId', v_execution.approval_id, 'execution_id', v_execution.id, 'idempotencyKeyDigest', 'sha256:' || encode(digest(p_idempotency_key, 'sha256'), 'hex'), 'networkExecution', false)
+    jsonb_build_object('approvalId', v_execution.approval_id, 'execution_id', v_execution.id, 'approvalSnapshot', v_approval.action_snapshot, 'idempotencyKeyDigest', 'sha256:' || encode(digest(p_idempotency_key, 'sha256'), 'hex'), 'networkExecution', false)
   );
 
   RETURN QUERY SELECT

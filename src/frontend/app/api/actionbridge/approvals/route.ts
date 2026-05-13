@@ -19,7 +19,7 @@ export async function GET() {
 
   const { data, error } = await (supabase as any)
     .from('actionbridge_approvals')
-    .select('id, action_id, action_name, risk_level, redacted_input, status, decision_reason, created_at, decided_at')
+    .select('id, action_id, connector_id, action_name, risk_level, redacted_input, action_snapshot, status, decision_reason, created_at, decided_at')
     .eq('user_id', user!.id)
     .order('created_at', { ascending: false })
     .limit(100);

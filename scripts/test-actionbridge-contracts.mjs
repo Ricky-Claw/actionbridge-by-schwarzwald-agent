@@ -192,6 +192,7 @@ if (!process.exitCode) {
   if (!executeRoute.includes('approval_required')) fail('execute route must support approval_required decision');
   if (!executeRoute.includes('redactActionBridgeValue')) fail('execute route must redact inputs before returning/logging');
   if (!approvalsRoute.includes('export async function POST')) fail('approvals route must support approve/reject decisions');
+  if (!approvalsRoute.includes('action_snapshot') || !approvalsRoute.includes('connector_id')) fail('approvals route must expose immutable approval snapshot fields');
   if (!approvalsRoute.includes('p_user_id: user!.id')) fail('approvals route must scope decisions to authenticated owner');
   if (!approvalsRoute.includes('ACTIONBRIDGE_APPROVAL_DECISION_FAILED')) fail('approvals route must fail closed if decision persistence fails');
   if (!approvalsRoute.includes('decide_actionbridge_approval_atomic')) fail('approvals route must use atomic approval decision RPC with audit');
@@ -247,7 +248,8 @@ if (exists('src/frontend/lib/actionbridge/persistence.ts')) {
   if (!persistence.includes('redactActionBridgeValue')) fail('persistence must redact before insert');
   if (!persistence.includes('actionbridge_audit_logs')) fail('persistence must write audit logs');
   if (!persistence.includes('actionbridge_approvals')) fail('persistence must write approvals');
-  if (!process.exitCode) pass('ActionBridge persistence helpers write approvals and redacted audit logs');
+  if (!persistence.includes('action_snapshot') || !persistence.includes('connector_id') || !persistence.includes('networkExecution: false')) fail('persistence must bind immutable approval snapshots with connector ownership context');
+  if (!process.exitCode) pass('ActionBridge persistence helpers write approvals, immutable snapshots, and redacted audit logs');
 } else {
   fail('Missing ActionBridge persistence helper: src/frontend/lib/actionbridge/persistence.ts');
 }
@@ -368,13 +370,17 @@ if (migrationFiles.length) {
     'actionbridge_executions',
     'idempotency_key',
     'execution_status',
+    'connector_id UUID',
+    'action_snapshot JSONB NOT NULL',
+    'actionbridge_approvals_connector_owner_fk',
     'consume_actionbridge_approval_for_execution',
     "status = 'approved'",
     "status NOT IN ('rejected', 'expired')",
     'UNIQUE (user_id, approval_id, idempotency_key)',
     'execution_id',
+    'approvalSnapshot',
   ]) {
-    if (!migration.includes(token)) fail(`ActionBridge migration missing execution/idempotency guard: ${token}`);
+    if (!migration.includes(token)) fail(`ActionBridge migration missing execution/idempotency/snapshot guard: ${token}`);
   }
   if (!migration.includes('GRANT EXECUTE ON FUNCTION public.consume_actionbridge_approval_for_execution(UUID, UUID, TEXT) TO service_role')) {
     fail('ActionBridge consume execution RPC must be executable by service_role');
@@ -399,7 +405,7 @@ if (migrationFiles.length) {
   if (!migration.includes('idempotencyKeyDigest') || !migration.includes("digest(p_idempotency_key, 'sha256')")) {
     fail('ActionBridge migration audit summary must store only idempotency key digest');
   }
-  if (!process.exitCode) pass('ActionBridge migration defines consume-once approval execution state and digest-only idempotency audit');
+  if (!process.exitCode) pass('ActionBridge migration defines consume-once approval execution state, immutable snapshots, and digest-only idempotency audit');
 }
 
 process.exit(process.exitCode || 0);

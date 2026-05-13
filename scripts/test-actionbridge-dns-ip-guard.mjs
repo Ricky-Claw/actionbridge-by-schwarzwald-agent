@@ -57,6 +57,8 @@ for (const [label, snapshot, expectedOk] of [
   ['public host + private IPv4 blocked', { hostname: 'api.example.com', addresses: [{ address: '10.0.0.5', family: 4 }] }, false],
   ['public host + link-local IPv4 blocked', { hostname: 'api.example.com', addresses: [{ address: '169.254.169.254', family: 4 }] }, false],
   ['public host + IPv6 ULA blocked', { hostname: 'api.example.com', addresses: [{ address: 'fd00::1', family: 6 }] }, false],
+  ['DNS rebinding simulated public then private blocked', { hostname: 'api.allowed.test', addresses: [{ address: '93.184.216.34', family: 4 }, { address: '10.0.0.7', family: 4 }] }, false],
+  ['redirect pivot simulated final private target blocked', { hostname: '169.254.169.254', addresses: [{ address: '169.254.169.254', family: 4 }] }, false],
   ['localhost host blocked despite public address', { hostname: 'localhost', addresses: [{ address: '93.184.216.34', family: 4 }] }, false],
   ['empty resolver result blocked', { hostname: 'api.example.com', addresses: [] }, false],
 ]) {

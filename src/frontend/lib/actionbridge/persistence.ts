@@ -6,6 +6,7 @@ import { redactActionBridgeValue } from './redaction';
 interface ActionBridgePersistenceBase {
   userId: string;
   actionId?: string | null;
+  connectorId?: string | null;
   actionName: string;
   riskLevel: ActionBridgeRiskLevel;
   input: unknown;
@@ -59,9 +60,18 @@ export async function createActionBridgeApproval(
     .insert({
       user_id: input.userId,
       action_id: input.actionId || null,
+      connector_id: input.connectorId || null,
       action_name: input.actionName,
       risk_level: input.riskLevel,
       redacted_input: redactActionBridgeValue(input.input),
+      action_snapshot: {
+        actionId: input.actionId || null,
+        connectorId: input.connectorId || null,
+        actionName: input.actionName,
+        riskLevel: input.riskLevel,
+        redactedInput: redactActionBridgeValue(input.input),
+        networkExecution: false,
+      },
       status: 'pending',
       decision_reason: input.decisionReason || null,
     })

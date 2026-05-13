@@ -248,6 +248,7 @@ const routeFiles = [
   'src/frontend/app/api/actionbridge/bridge/handshake/route.ts',
   'src/frontend/app/actionbridge/bridge.js/route.ts',
   'src/frontend/app/api/actionbridge/capabilities/route.ts',
+  'src/frontend/app/api/actionbridge/agent-tools/route.ts',
 ];
 for (const file of routeFiles) {
   if (!exists(file)) fail(`Missing ActionBridge route: ${file}`);
@@ -269,6 +270,7 @@ if (!process.exitCode) {
   const bridgeHandshakeRoute = read('src/frontend/app/api/actionbridge/bridge/handshake/route.ts');
   const bridgeScriptRoute = read('src/frontend/app/actionbridge/bridge.js/route.ts');
   const capabilitiesRoute = read('src/frontend/app/api/actionbridge/capabilities/route.ts');
+  const agentToolsRoute = read('src/frontend/app/api/actionbridge/agent-tools/route.ts');
   for (const [name, source] of [['actions', actionsRoute], ['connectors', connectorsRoute], ['execute', executeRoute], ['approvals', approvalsRoute], ['audit', auditRoute], ['executions', executionsRoute]]) {
     if (!source.includes('createClient')) fail(`${name} route must use Supabase server auth`);
     if (!source.includes('auth.getUser')) fail(`${name} route must require authenticated user`);
@@ -342,6 +344,10 @@ if (!process.exitCode) {
     if (!capabilitiesRoute.includes(token)) fail(`capabilities route missing ${token}`);
   }
   if (capabilitiesRoute.includes('secret_ref') || capabilitiesRoute.includes('base_url') || capabilitiesRoute.includes('riskLevel: body')) fail('capabilities route must not expose secrets/base URLs or accept client risk override');
+  for (const token of ['actionbridge.agent-tools.v1', 'auth.getUser', 'actionbridge_connectors', 'actionbridge_actions', 'actionbridge_capability_rules', ".eq('user_id', user!.id)", ".eq('safety_status', 'pass')", ".eq('permission_status', 'active')", 'createActionBridgeWidgetToolCatalogs', "mode: 'catalog_only'", 'networkExecution: false']) {
+    if (!agentToolsRoute.includes(token)) fail(`agent-tools route missing ${token}`);
+  }
+  if (agentToolsRoute.includes('secret_ref') || agentToolsRoute.includes('base_url') || agentToolsRoute.includes('token_digest') || agentToolsRoute.includes('config')) fail('agent-tools route must not expose secrets, base URLs, token digests, or raw config');
   if (!process.exitCode) pass('ActionBridge API routes are auth-gated and policy-driven');
 }
 

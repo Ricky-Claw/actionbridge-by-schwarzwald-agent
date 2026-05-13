@@ -25,6 +25,7 @@ const requiredFiles = [
   'src/frontend/lib/actionbridge/tool-catalog.ts',
   'src/frontend/lib/actionbridge/schema-safety.ts',
   'src/frontend/lib/actionbridge/read-only-executor.ts',
+  'src/frontend/lib/actionbridge/domain-verification.ts',
 ];
 
 for (const file of requiredFiles) {
@@ -147,6 +148,13 @@ if (!process.exitCode) {
   }
   if (!process.exitCode) pass('ActionBridge read-only executor enforces DNS, allowlist, timeout, redirects, limits, and redaction');
 
+  const domainVerification = read('src/frontend/lib/actionbridge/domain-verification.ts');
+  for (const token of ['createActionBridgeVerificationChallenge', 'verifyActionBridgeDomainChallenge', 'human_attestation', 'well_known', 'meta_tag', 'dns_txt', 'actionbridge-verification=', 'dns.resolveTxt', 'redirect: \'manual\'', 'AbortSignal.timeout']) {
+    if (!domainVerification.includes(token)) fail(`domain-verification.ts missing ${token}`);
+  }
+  if (!domainVerification.includes('isPrivateActionBridgeHost')) fail('domain verification must reject private/internal origins');
+  if (!process.exitCode) pass('ActionBridge domain verification supports attestation, well-known, meta tag, and DNS TXT');
+
   const websiteConnector = read('src/frontend/lib/actionbridge/website-connector.ts');
   for (const token of ['server-only', 'createActionBridgeWebsiteExtractPlan', 'public_page_extract', 'same_origin_route_discovery', 'formInventory', 'no_form_submit', 'networkExecution: false', 'requiredExecutorGates', 'serverSideDnsPinning', 'robotsPolicy', 'browserNoWriteInterception', 'piiSecretRedaction', 'killSwitch']) {
     if (!websiteConnector.includes(token)) fail(`website-connector.ts missing ${token}`);
@@ -202,6 +210,7 @@ const routeFiles = [
   'src/frontend/app/api/actionbridge/executions/route.ts',
   'src/frontend/app/api/actionbridge/setup-profile/route.ts',
   'src/frontend/app/api/actionbridge/tool-catalog/route.ts',
+  'src/frontend/app/api/actionbridge/connectors/verify/route.ts',
 ];
 for (const file of routeFiles) {
   if (!exists(file)) fail(`Missing ActionBridge route: ${file}`);
@@ -217,6 +226,7 @@ if (!process.exitCode) {
   const executionsRoute = read('src/frontend/app/api/actionbridge/executions/route.ts');
   const setupProfileRoute = read('src/frontend/app/api/actionbridge/setup-profile/route.ts');
   const toolCatalogRoute = read('src/frontend/app/api/actionbridge/tool-catalog/route.ts');
+  const connectorVerifyRoute = read('src/frontend/app/api/actionbridge/connectors/verify/route.ts');
   for (const [name, source] of [['actions', actionsRoute], ['connectors', connectorsRoute], ['execute', executeRoute], ['approvals', approvalsRoute], ['audit', auditRoute], ['executions', executionsRoute]]) {
     if (!source.includes('createClient')) fail(`${name} route must use Supabase server auth`);
     if (!source.includes('auth.getUser')) fail(`${name} route must require authenticated user`);
@@ -268,6 +278,9 @@ if (!process.exitCode) {
     if (!toolCatalogRoute.includes(token)) fail(`tool-catalog route missing ${token}`);
   }
   if (toolCatalogRoute.includes('secret_ref') || toolCatalogRoute.includes('base_url') || toolCatalogRoute.includes('idempotency_key')) fail('tool-catalog route must not select/expose secrets, base URLs, or idempotency keys');
+  for (const token of ['actionbridge_connector_verifications', 'createActionBridgeVerificationChallenge', 'verifyActionBridgeDomainChallenge', 'digestActionBridgeVerificationToken', 'network_execution_enabled: true', "safety_status: 'pass'", "permission_status: 'active'", ".eq('user_id', user!.id)"]) {
+    if (!connectorVerifyRoute.includes(token)) fail(`connector verification route missing ${token}`);
+  }
   if (!process.exitCode) pass('ActionBridge API routes are auth-gated and policy-driven');
 }
 
@@ -432,6 +445,11 @@ if (exists('src/frontend/app/api/actionbridge/connectors/route.ts')) {
 if (migrationFiles.length) {
   const migration = migrationFiles.map((name) => read(`supabase/migrations/${name}`)).join('\n');
   for (const token of [
+    'actionbridge_connector_verifications',
+    "method IN ('human_attestation', 'well_known', 'meta_tag', 'dns_txt')",
+    "status IN ('pending', 'verified', 'failed', 'revoked')",
+    'FOREIGN KEY (connector_id, user_id)',
+    'actionbridge_connector_verifications_owner_select',
     'actionbridge_executions',
     'idempotency_key',
     'execution_status',

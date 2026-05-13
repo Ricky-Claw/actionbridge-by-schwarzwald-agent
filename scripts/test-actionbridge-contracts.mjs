@@ -173,7 +173,7 @@ if (!process.exitCode) {
   if (!process.exitCode) pass('ActionBridge setup links generate digest-only customer setup tokens');
 
   const domainVerification = read('src/frontend/lib/actionbridge/domain-verification.ts');
-  for (const token of ['createActionBridgeVerificationChallenge', 'verifyActionBridgeDomainChallenge', 'human_attestation', 'well_known', 'meta_tag', 'dns_txt', 'actionbridge-verification=', 'dns.resolveTxt', 'redirect: \'manual\'', 'AbortSignal.timeout']) {
+  for (const token of ['createActionBridgeVerificationChallenge', 'verifyActionBridgeDomainChallenge', 'human_attestation', 'well_known', 'meta_tag', 'dns_txt', 'actionbridge-verification=', 'dns.resolveTxt', 'dns.lookup', 'decideActionBridgeDnsPinning', 'enforceActionBridgeResponseByteLimit', 'redirect: \'manual\'', 'AbortSignal.timeout']) {
     if (!domainVerification.includes(token)) fail(`domain-verification.ts missing ${token}`);
   }
   if (!domainVerification.includes('isPrivateActionBridgeHost')) fail('domain verification must reject private/internal origins');
@@ -325,7 +325,7 @@ if (!process.exitCode) {
   for (const token of ['createActionBridgeBridgeScript', 'application/javascript', 'nosniff']) {
     if (!bridgeScriptRoute.includes(token)) fail(`bridge script route missing ${token}`);
   }
-  for (const token of ['actionbridge_connector_verifications', 'createActionBridgeVerificationChallenge', 'verifyActionBridgeDomainChallenge', 'digestActionBridgeVerificationToken', 'network_execution_enabled: true', "safety_status: 'pass'", "permission_status: 'active'", ".eq('user_id', user!.id)"]) {
+  for (const token of ['actionbridge_connector_verifications', 'createActionBridgeVerificationChallenge', 'verifyActionBridgeDomainChallenge', 'digestActionBridgeVerificationToken', 'strongVerification', 'network_execution_enabled: false', "safety_status: strongVerification ? 'pass' : 'untested'", "permission_status: 'active'", ".eq('user_id', user!.id)"]) {
     if (!connectorVerifyRoute.includes(token)) fail(`connector verification route missing ${token}`);
   }
   if (!process.exitCode) pass('ActionBridge API routes are auth-gated and policy-driven');

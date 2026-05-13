@@ -3,6 +3,8 @@ import 'server-only';
 import crypto from 'node:crypto';
 import dns from 'node:dns/promises';
 import { isPrivateActionBridgeHost } from './http-connector';
+import { decideActionBridgeDnsPinning } from './dns-ip-guard';
+import { enforceActionBridgeResponseByteLimit } from './response-limits';
 
 export type ActionBridgeVerificationMethod = 'human_attestation' | 'well_known' | 'meta_tag' | 'dns_txt';
 export type ActionBridgeVerificationStatus = 'pending' | 'verified' | 'failed' | 'revoked';
@@ -109,8 +111,21 @@ export async function verifyActionBridgeDomainChallenge(input: {
   const target = input.method === 'well_known'
     ? new URL('/.well-known/actionbridge-verify.txt', origin.origin)
     : origin;
+  const addresses = await dns.lookup(target.hostname, { all: true, verbatim: true });
+  const dnsDecision = decideActionBridgeDnsPinning({
+    hostname: target.hostname,
+    addresses: addresses.map((entry) => ({ address: entry.address, family: entry.family === 6 ? 6 : 4 })),
+    networkExecution: false,
+  });
+  if (!dnsDecision.ok) {
+    return { ok: false, status: 'failed', evidence: { reason: dnsDecision.reason, dns: dnsDecision }, networkExecution: false };
+  }
   const response = await fetch(target, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(5000) });
   const body = await response.text();
+  const limit = enforceActionBridgeResponseByteLimit(body);
+  if (!limit.ok) {
+    return { ok: false, status: 'failed', evidence: { reason: limit.reason, bytes: limit.bytes }, networkExecution: true };
+  }
   const ok = input.method === 'well_known'
     ? body.trim().split(/\r?\n/).includes(tokenLine)
     : body.includes(`name="actionbridge-verification" content="${input.token}"`) || body.includes(`content="${input.token}" name="actionbridge-verification"`);

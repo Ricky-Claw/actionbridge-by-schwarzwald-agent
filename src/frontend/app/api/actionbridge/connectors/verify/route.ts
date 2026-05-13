@@ -125,9 +125,15 @@ export async function PATCH(request: NextRequest) {
     .eq('id', verificationId);
 
   if (result.ok) {
+    const strongVerification = verification.method === 'well_known' || verification.method === 'meta_tag' || verification.method === 'dns_txt';
     await (serviceSupabase as any)
       .from('actionbridge_connectors')
-      .update({ safety_status: 'pass', permission_status: 'active', network_execution_enabled: true, updated_at: new Date().toISOString() })
+      .update({
+        safety_status: strongVerification ? 'pass' : 'untested',
+        permission_status: 'active',
+        network_execution_enabled: false,
+        updated_at: new Date().toISOString(),
+      })
       .eq('user_id', user!.id)
       .eq('id', verification.connector_id);
   }

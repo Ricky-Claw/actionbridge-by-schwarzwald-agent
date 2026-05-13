@@ -28,6 +28,7 @@ const requiredFiles = [
   'src/frontend/lib/actionbridge/domain-verification.ts',
   'src/frontend/lib/actionbridge/setup-links.ts',
   'src/frontend/lib/actionbridge/setup-session.ts',
+  'src/frontend/lib/actionbridge/bridge-handshake.ts',
 ];
 
 for (const file of requiredFiles) {
@@ -150,6 +151,13 @@ if (!process.exitCode) {
   }
   if (!process.exitCode) pass('ActionBridge read-only executor enforces DNS, allowlist, timeout, redirects, limits, and redaction');
 
+  const bridgeHandshake = read('src/frontend/lib/actionbridge/bridge-handshake.ts');
+  for (const token of ['parseActionBridgeBridgeHandshake', 'createActionBridgeBridgeScript', 'normalizeActionBridgeHandshakeOrigin', 'credentials:\'omit\'', 'window.ActionBridge', 'data-setup-token']) {
+    if (!bridgeHandshake.includes(token)) fail(`bridge-handshake.ts missing ${token}`);
+  }
+  if (bridgeHandshake.includes('secret_ref') || bridgeHandshake.includes('form.submit') || bridgeHandshake.includes('querySelectorAll')) fail('bridge handshake/script v1 must not expose secrets, submit forms, or scrape DOM');
+  if (!process.exitCode) pass('ActionBridge bridge script v1 performs connected-only handshake');
+
   const setupSession = read('src/frontend/lib/actionbridge/setup-session.ts');
   for (const token of ['createActionBridgeSetupSessionView', 'digestActionBridgeSetupSessionToken', 'isActionBridgeSetupSessionUsable', 'bridgeInstall', 'capabilityChoices', 'site.knowledge.read', 'lead.prepare_draft', 'appointment.request.prepare_draft']) {
     if (!setupSession.includes(token)) fail(`setup-session.ts missing ${token}`);
@@ -229,6 +237,8 @@ const routeFiles = [
   'src/frontend/app/api/actionbridge/connectors/verify/route.ts',
   'src/frontend/app/api/actionbridge/setup-links/route.ts',
   'src/frontend/app/api/actionbridge/setup-session/route.ts',
+  'src/frontend/app/api/actionbridge/bridge/handshake/route.ts',
+  'src/frontend/app/actionbridge/bridge.js/route.ts',
 ];
 for (const file of routeFiles) {
   if (!exists(file)) fail(`Missing ActionBridge route: ${file}`);
@@ -247,6 +257,8 @@ if (!process.exitCode) {
   const connectorVerifyRoute = read('src/frontend/app/api/actionbridge/connectors/verify/route.ts');
   const setupLinksRoute = read('src/frontend/app/api/actionbridge/setup-links/route.ts');
   const setupSessionRoute = read('src/frontend/app/api/actionbridge/setup-session/route.ts');
+  const bridgeHandshakeRoute = read('src/frontend/app/api/actionbridge/bridge/handshake/route.ts');
+  const bridgeScriptRoute = read('src/frontend/app/actionbridge/bridge.js/route.ts');
   for (const [name, source] of [['actions', actionsRoute], ['connectors', connectorsRoute], ['execute', executeRoute], ['approvals', approvalsRoute], ['audit', auditRoute], ['executions', executionsRoute]]) {
     if (!source.includes('createClient')) fail(`${name} route must use Supabase server auth`);
     if (!source.includes('auth.getUser')) fail(`${name} route must require authenticated user`);
@@ -306,6 +318,13 @@ if (!process.exitCode) {
     if (!setupSessionRoute.includes(token)) fail(`setup-session route missing ${token}`);
   }
   if (setupSessionRoute.includes('user_id') || setupSessionRoute.includes('secret_ref')) fail('public setup-session route must not select user_id or secrets');
+  for (const token of ['parseActionBridgeBridgeHandshake', 'actionbridge_setup_links', 'actionbridge_bridge_installations', 'originHeader && originHeader !== parsed.origin', 'connected_only']) {
+    if (!bridgeHandshakeRoute.includes(token)) fail(`bridge handshake route missing ${token}`);
+  }
+  if (bridgeHandshakeRoute.includes('secret_ref') || bridgeHandshakeRoute.includes('base_url')) fail('bridge handshake route must not select secrets or connector base URLs');
+  for (const token of ['createActionBridgeBridgeScript', 'application/javascript', 'nosniff']) {
+    if (!bridgeScriptRoute.includes(token)) fail(`bridge script route missing ${token}`);
+  }
   for (const token of ['actionbridge_connector_verifications', 'createActionBridgeVerificationChallenge', 'verifyActionBridgeDomainChallenge', 'digestActionBridgeVerificationToken', 'network_execution_enabled: true', "safety_status: 'pass'", "permission_status: 'active'", ".eq('user_id', user!.id)"]) {
     if (!connectorVerifyRoute.includes(token)) fail(`connector verification route missing ${token}`);
   }
@@ -477,6 +496,10 @@ if (migrationFiles.length) {
     "status IN ('pending', 'opened', 'completed', 'revoked', 'expired')",
     'token_digest TEXT NOT NULL',
     'actionbridge_setup_links_owner_select',
+    'actionbridge_bridge_installations',
+    'actionbridge_bridge_installations_owner_select',
+    "status IN ('connected', 'stale', 'revoked')",
+    'FOREIGN KEY (setup_link_id, user_id)',
     'actionbridge_connector_verifications',
     "method IN ('human_attestation', 'well_known', 'meta_tag', 'dns_txt')",
     "status IN ('pending', 'verified', 'failed', 'revoked')",

@@ -1,6 +1,7 @@
 import 'server-only';
 
 import type { ActionBridgeActionDefinition, ActionBridgeConnector } from './types';
+import { compileActionBridgeCapabilityTool, type ActionBridgeCapabilityName } from './capability-rules';
 import { toActionBridgeToolDefinition } from './tool-interface';
 
 export interface ActionBridgeWidgetTool {
@@ -33,7 +34,34 @@ export interface ActionBridgeWidgetToolCatalog {
 export function createActionBridgeWidgetToolCatalog(input: {
   connector: Pick<ActionBridgeConnector, 'id' | 'name' | 'type' | 'enabled' | 'capabilities' | 'safetyStatus' | 'permissionStatus'>;
   actions: ActionBridgeActionDefinition[];
+  capabilityRules?: Array<{ id: string; tenantId: string; connectorId: string; name: ActionBridgeCapabilityName; enabled: boolean }>;
 }): ActionBridgeWidgetToolCatalog {
+  const actionTools = input.actions
+    .filter((action) => action.connectorId === input.connector.id)
+    .map((action) => {
+      const tool = toActionBridgeToolDefinition(action);
+      return {
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        riskLevel: tool.riskLevel,
+        requiresApproval: tool.requiresApproval,
+        enabled: action.enabled,
+      };
+    });
+  const capabilityTools = (input.capabilityRules || [])
+    .filter((rule) => rule.connectorId === input.connector.id)
+    .map((rule) => {
+      const tool = compileActionBridgeCapabilityTool(rule);
+      return {
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        riskLevel: tool.riskLevel,
+        requiresApproval: tool.requiresApproval,
+        enabled: tool.enabled,
+      };
+    });
   return {
     version: 'actionbridge.catalog.v1',
     connector: {
@@ -45,19 +73,7 @@ export function createActionBridgeWidgetToolCatalog(input: {
       safetyStatus: input.connector.safetyStatus || 'untested',
       permissionStatus: input.connector.permissionStatus || 'draft',
     },
-    tools: input.actions
-      .filter((action) => action.connectorId === input.connector.id)
-      .map((action) => {
-        const tool = toActionBridgeToolDefinition(action);
-        return {
-          name: tool.name,
-          description: tool.description,
-          inputSchema: tool.inputSchema,
-          riskLevel: tool.riskLevel,
-          requiresApproval: tool.requiresApproval,
-          enabled: action.enabled,
-        };
-      }),
+    tools: [...actionTools, ...capabilityTools],
     execution: {
       mode: 'dry_run_only',
       networkExecution: false,
@@ -68,6 +84,7 @@ export function createActionBridgeWidgetToolCatalog(input: {
 export function createActionBridgeWidgetToolCatalogs(input: {
   connectors: Array<Pick<ActionBridgeConnector, 'id' | 'name' | 'type' | 'enabled' | 'capabilities' | 'safetyStatus' | 'permissionStatus'>>;
   actions: ActionBridgeActionDefinition[];
+  capabilityRules?: Array<{ id: string; tenantId: string; connectorId: string; name: ActionBridgeCapabilityName; enabled: boolean }>;
 }): ActionBridgeWidgetToolCatalog[] {
-  return input.connectors.map((connector) => createActionBridgeWidgetToolCatalog({ connector, actions: input.actions }));
+  return input.connectors.map((connector) => createActionBridgeWidgetToolCatalog({ connector, actions: input.actions, capabilityRules: input.capabilityRules || [] }));
 }

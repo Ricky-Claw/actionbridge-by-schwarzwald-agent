@@ -29,6 +29,7 @@ const requiredFiles = [
   'src/frontend/lib/actionbridge/setup-links.ts',
   'src/frontend/lib/actionbridge/setup-session.ts',
   'src/frontend/lib/actionbridge/bridge-handshake.ts',
+  'src/frontend/lib/actionbridge/capability-rules.ts',
 ];
 
 for (const file of requiredFiles) {
@@ -151,6 +152,13 @@ if (!process.exitCode) {
   }
   if (!process.exitCode) pass('ActionBridge read-only executor enforces DNS, allowlist, timeout, redirects, limits, and redaction');
 
+  const capabilityRules = read('src/frontend/lib/actionbridge/capability-rules.ts');
+  for (const token of ['ACTIONBRIDGE_CAPABILITY_DEFINITIONS', 'site.knowledge.read', 'lead.prepare_draft', 'appointment.request.prepare_draft', 'requiresApproval: true', 'riskLevel: \'write\'', 'sanitizeActionBridgeInputSchema', 'compileActionBridgeCapabilityTool']) {
+    if (!capabilityRules.includes(token)) fail(`capability-rules.ts missing ${token}`);
+  }
+  if (capabilityRules.includes('transactional') || capabilityRules.includes('destructive') || capabilityRules.includes('form.submit') || capabilityRules.includes('calendar write')) fail('capability rules v1 must not expose transactional/destructive execution');
+  if (!process.exitCode) pass('ActionBridge capability rules define safe read/draft capabilities');
+
   const bridgeHandshake = read('src/frontend/lib/actionbridge/bridge-handshake.ts');
   for (const token of ['parseActionBridgeBridgeHandshake', 'createActionBridgeBridgeScript', 'normalizeActionBridgeHandshakeOrigin', 'credentials:\'omit\'', 'window.ActionBridge', 'data-setup-token']) {
     if (!bridgeHandshake.includes(token)) fail(`bridge-handshake.ts missing ${token}`);
@@ -239,6 +247,7 @@ const routeFiles = [
   'src/frontend/app/api/actionbridge/setup-session/route.ts',
   'src/frontend/app/api/actionbridge/bridge/handshake/route.ts',
   'src/frontend/app/actionbridge/bridge.js/route.ts',
+  'src/frontend/app/api/actionbridge/capabilities/route.ts',
 ];
 for (const file of routeFiles) {
   if (!exists(file)) fail(`Missing ActionBridge route: ${file}`);
@@ -259,6 +268,7 @@ if (!process.exitCode) {
   const setupSessionRoute = read('src/frontend/app/api/actionbridge/setup-session/route.ts');
   const bridgeHandshakeRoute = read('src/frontend/app/api/actionbridge/bridge/handshake/route.ts');
   const bridgeScriptRoute = read('src/frontend/app/actionbridge/bridge.js/route.ts');
+  const capabilitiesRoute = read('src/frontend/app/api/actionbridge/capabilities/route.ts');
   for (const [name, source] of [['actions', actionsRoute], ['connectors', connectorsRoute], ['execute', executeRoute], ['approvals', approvalsRoute], ['audit', auditRoute], ['executions', executionsRoute]]) {
     if (!source.includes('createClient')) fail(`${name} route must use Supabase server auth`);
     if (!source.includes('auth.getUser')) fail(`${name} route must require authenticated user`);
@@ -306,7 +316,7 @@ if (!process.exitCode) {
   for (const token of ['normalizeActionBridgeSetupProfile', 'ACTIONBRIDGE_SECRET_STORAGE_NOT_CONFIGURED', 'INVALID_ACTIONBRIDGE_SETUP_PROFILE']) {
     if (!setupProfileRoute.includes(token)) fail(`setup-profile route missing ${token}`);
   }
-  for (const token of ['createActionBridgeWidgetToolCatalogs', 'actionbridge_connectors', 'actionbridge_actions', ".eq('user_id', user!.id)", "version: 'actionbridge.catalog.v1'", 'networkExecution: false']) {
+  for (const token of ['createActionBridgeWidgetToolCatalogs', 'actionbridge_connectors', 'actionbridge_actions', 'actionbridge_capability_rules', ".eq('user_id', user!.id)", "version: 'actionbridge.catalog.v1'", 'networkExecution: false']) {
     if (!toolCatalogRoute.includes(token)) fail(`tool-catalog route missing ${token}`);
   }
   if (toolCatalogRoute.includes('secret_ref') || toolCatalogRoute.includes('base_url') || toolCatalogRoute.includes('idempotency_key')) fail('tool-catalog route must not select/expose secrets, base URLs, or idempotency keys');
@@ -328,6 +338,10 @@ if (!process.exitCode) {
   for (const token of ['actionbridge_connector_verifications', 'createActionBridgeVerificationChallenge', 'verifyActionBridgeDomainChallenge', 'digestActionBridgeVerificationToken', 'strongVerification', 'network_execution_enabled: false', "safety_status: strongVerification ? 'pass' : 'untested'", "permission_status: 'active'", ".eq('user_id', user!.id)"]) {
     if (!connectorVerifyRoute.includes(token)) fail(`connector verification route missing ${token}`);
   }
+  for (const token of ['actionbridge_capability_rules', 'normalizeActionBridgeCapabilityRuleInput', 'ACTIONBRIDGE_CAPABILITY_REQUIRES_VERIFIED_ACTIVE_CONNECTOR', "connector.safety_status !== 'pass'", "connector.permission_status !== 'active'", 'requires_approval', ".eq('user_id', user!.id)", 'createCoreServiceClient']) {
+    if (!capabilitiesRoute.includes(token)) fail(`capabilities route missing ${token}`);
+  }
+  if (capabilitiesRoute.includes('secret_ref') || capabilitiesRoute.includes('base_url') || capabilitiesRoute.includes('riskLevel: body')) fail('capabilities route must not expose secrets/base URLs or accept client risk override');
   if (!process.exitCode) pass('ActionBridge API routes are auth-gated and policy-driven');
 }
 
@@ -496,6 +510,11 @@ if (migrationFiles.length) {
     "status IN ('pending', 'opened', 'completed', 'revoked', 'expired')",
     'token_digest TEXT NOT NULL',
     'actionbridge_setup_links_owner_select',
+    'actionbridge_capability_rules',
+    "name IN ('site.knowledge.read', 'lead.prepare_draft', 'appointment.request.prepare_draft')",
+    "CHECK (risk_level = 'read' OR requires_approval = true)",
+    "name = 'site.knowledge.read' OR risk_level = 'write'",
+    'actionbridge_capability_rules_owner_select',
     'actionbridge_bridge_installations',
     'actionbridge_bridge_installations_owner_select',
     "status IN ('connected', 'stale', 'revoked')",

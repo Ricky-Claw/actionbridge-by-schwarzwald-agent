@@ -40,6 +40,17 @@ export async function GET() {
     return NextResponse.json({ error: 'ACTIONBRIDGE_TOOL_CATALOG_ACTIONS_FAILED' }, { status: 500 });
   }
 
+  const { data: capabilityRows, error: capabilityError } = await (supabase as any)
+    .from('actionbridge_capability_rules')
+    .select('id,user_id,connector_id,name,enabled')
+    .eq('user_id', user!.id)
+    .eq('enabled', true)
+    .limit(200);
+
+  if (capabilityError) {
+    return NextResponse.json({ error: 'ACTIONBRIDGE_TOOL_CATALOG_CAPABILITIES_FAILED' }, { status: 500 });
+  }
+
   const connectors: Array<Pick<ActionBridgeConnector, 'id' | 'name' | 'type' | 'enabled' | 'capabilities' | 'safetyStatus' | 'permissionStatus'>> = (connectorRows || []).map((connector: any) => ({
     id: connector.id,
     name: connector.name,
@@ -63,9 +74,17 @@ export async function GET() {
     requiresApproval: action.requires_approval,
   }));
 
+  const capabilityRules = (capabilityRows || []).map((rule: any) => ({
+    id: rule.id,
+    tenantId: rule.user_id,
+    connectorId: rule.connector_id,
+    name: rule.name,
+    enabled: rule.enabled,
+  }));
+
   return NextResponse.json({
     version: 'actionbridge.catalog.v1',
-    catalogs: createActionBridgeWidgetToolCatalogs({ connectors, actions }),
+    catalogs: createActionBridgeWidgetToolCatalogs({ connectors, actions, capabilityRules }),
     execution: { mode: 'dry_run_only', networkExecution: false },
   });
 }

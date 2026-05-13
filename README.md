@@ -1,10 +1,10 @@
 # ActionBridge by Schwarzwald-Agent
 
-Universal Agent Connector OS: APIs, OAuth, MCP, websites, widgets, browser/RPA, webhooks, REST, forms, shops, calendars, inboxes and customer apps normalized into safe, typed, auditable agent actions.
+Universal Agent Connector OS between Schwarzwald-Agent and customer-approved websites/apps/backends: APIs, OAuth, MCP, websites, widgets, browser/RPA, webhooks, REST, forms, shops, calendars, inboxes and customer apps normalized into safe, typed, auditable agent actions.
 
 > API-Key = für Programmierer. ActionBridge = für Agents.
 
-North star: ActionBridge translates every customer-approved digital capability into agent-language JSON tool schemas with policy, approval, redaction, audit and kill-switches built in — and executes allowed actions safely. The product goal is a universal connector/plugin layer for Schwarzwald-Agent: verify domain/app authorization, install the simplest bridge when needed (one-line script, platform plugin, SDK, OAuth, or API), activate capabilities, and let chatbots/assistants/automations act through ActionBridge. APIs are optional; simple no-code/low-code website capability is central.
+North star: ActionBridge translates every customer-approved digital capability into agent-language JSON tool schemas with policy, approval, redaction, audit and kill-switches built in — and executes allowed actions safely. ActionBridge is not the chatbot or automation product itself; Schwarzwald-Agent provides chatbots, assistants, and automations. ActionBridge is their universal connector/plugin layer: verify domain/app authorization, install the simplest bridge when needed (one-line script, platform plugin, SDK, OAuth, or API), activate capabilities, and let Schwarzwald-Agent act through ActionBridge. APIs are optional; simple no-code/low-code website capability is central.
 
 ## Included
 

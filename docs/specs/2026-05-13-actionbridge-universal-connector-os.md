@@ -5,7 +5,7 @@ Status: Product north star / alignment spec
 
 ## One-Line Vision
 
-ActionBridge turns any customer-approved website, URL, app, plugin, backend capability, or digital surface into safe, typed, auditable agent tools that Schwarzwald-Agent can use and execute under policy.
+ActionBridge is the connector layer that turns any customer-approved website, URL, app, plugin, backend capability, or digital surface into safe, typed, auditable agent tools that Schwarzwald-Agent can use and execute under policy.
 
 ## Core Thesis
 
@@ -36,11 +36,13 @@ ActionBridge is the translation layer:
 
 The agent should not need to understand raw APIs, DOM selectors, OAuth mechanics, form fields, RPA clicks, backend quirks, or customer-system internals. It receives a constrained tool catalog with policy, approvals, audit, and redaction built in.
 
+ActionBridge is not the chatbot, AI assistant, or automation product itself. Those experiences belong to Schwarzwald-Agent. ActionBridge is the bridge those agents use to reach customer-approved websites/apps/backends safely.
+
 ActionBridge is not “API-first.” APIs are only one path. The core product must also support a simple website/plugin path: the customer proves authorization for a domain, installs a lightweight bridge script/plugin/SDK when deeper capabilities are needed, activates capabilities, and Schwarzwald-Agent can then answer questions or perform approved actions through ActionBridge.
 
 ## Product Outcome
 
-Schwarzwald-Agent becomes usable by any SME because onboarding becomes:
+Schwarzwald-Agent chatbots, assistants, and automations become usable by any SME because ActionBridge onboarding becomes:
 
 1. Customer enters a website, URL, app, shop, calendar, inbox, or backend target.
 2. Customer proves authorization/ownership via Meta tag, DNS TXT, well-known file, OAuth consent, or approved account flow.

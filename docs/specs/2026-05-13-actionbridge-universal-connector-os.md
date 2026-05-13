@@ -44,13 +44,15 @@ ActionBridge is not “API-first.” APIs are only one path. The core product mu
 
 Schwarzwald-Agent chatbots, assistants, and automations become usable by any SME because ActionBridge onboarding becomes:
 
-1. Customer enters a website, URL, app, shop, calendar, inbox, or backend target.
-2. Customer proves authorization/ownership via Meta tag, DNS TXT, well-known file, OAuth consent, or approved account flow.
-3. If capabilities require site/backend access, customer installs the simplest bridge: one-line script, platform plugin, or small SDK adapter.
-4. ActionBridge observes/imports exposed capabilities and translates them into agent-safe JSON tool schemas.
-5. Sentinel policy assigns risk, approval, redaction, rate limits, audit, and execution boundaries.
-6. Nexus builds/activates connector actions only inside those guardrails.
-7. The customer can expose Schwarzwald-Agent through chatbot/widget, internal console, API, or workflow automation.
+1. Ricky/operator opens ActionBridge inside the Schwarzwald-Agent dashboard.
+2. Operator creates a customer setup link for a website, URL, app, shop, calendar, inbox, or backend target.
+3. Customer uses the link to prove authorization/ownership via Meta tag, DNS TXT, well-known file, OAuth consent, or approved account flow.
+4. If capabilities require site/backend access, customer installs the simplest bridge: one-line script, platform plugin, or small SDK adapter.
+5. Customer and/or operator defines allowed actions, rule boundaries, approval requirements, and kill-switch posture in the dashboard.
+6. ActionBridge observes/imports exposed capabilities and translates them into agent-safe JSON tool schemas.
+7. Sentinel policy assigns risk, approval, redaction, rate limits, audit, and execution boundaries.
+8. Nexus builds/activates connector actions only inside those guardrails.
+9. The customer can expose Schwarzwald-Agent through chatbot/widget, internal console, API, or workflow automation.
 
 ## Connector Surfaces
 
@@ -84,9 +86,11 @@ No connector jumps levels automatically.
 
 ## Customer-Facing Product Shape
 
-### Setup Autopilot
+### Dashboard Setup + Customer Self-Service Link
 
-Customer inputs a website or integration target. ActionBridge returns:
+ActionBridge should be embedded into the Schwarzwald-Agent dashboard. Ricky/operator can create a customer setup link. The customer opens the link, verifies the domain/app, installs the bridge/plugin if needed, and defines or confirms allowed actions/rules without needing direct technical onboarding.
+
+The setup flow returns:
 
 - business profile;
 - public content summary;

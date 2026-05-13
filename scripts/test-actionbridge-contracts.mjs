@@ -27,6 +27,7 @@ const requiredFiles = [
   'src/frontend/lib/actionbridge/read-only-executor.ts',
   'src/frontend/lib/actionbridge/domain-verification.ts',
   'src/frontend/lib/actionbridge/setup-links.ts',
+  'src/frontend/lib/actionbridge/setup-session.ts',
 ];
 
 for (const file of requiredFiles) {
@@ -149,6 +150,13 @@ if (!process.exitCode) {
   }
   if (!process.exitCode) pass('ActionBridge read-only executor enforces DNS, allowlist, timeout, redirects, limits, and redaction');
 
+  const setupSession = read('src/frontend/lib/actionbridge/setup-session.ts');
+  for (const token of ['createActionBridgeSetupSessionView', 'digestActionBridgeSetupSessionToken', 'isActionBridgeSetupSessionUsable', 'bridgeInstall', 'capabilityChoices', 'site.knowledge.read', 'lead.prepare_draft', 'appointment.request.prepare_draft']) {
+    if (!setupSession.includes(token)) fail(`setup-session.ts missing ${token}`);
+  }
+  if (setupSession.includes('secret_ref') || setupSession.includes('token_digest')) fail('setup-session view must not expose secrets or token digests');
+  if (!process.exitCode) pass('ActionBridge setup session exposes customer-safe setup state');
+
   const setupLinks = read('src/frontend/lib/actionbridge/setup-links.ts');
   for (const token of ['createActionBridgeSetupLinkDraft', 'digestActionBridgeSetupLinkToken', 'normalizeActionBridgeSetupLinkOrigin', 'absl_', 'tokenDigest', 'isPrivateActionBridgeHost']) {
     if (!setupLinks.includes(token)) fail(`setup-links.ts missing ${token}`);
@@ -220,6 +228,7 @@ const routeFiles = [
   'src/frontend/app/api/actionbridge/tool-catalog/route.ts',
   'src/frontend/app/api/actionbridge/connectors/verify/route.ts',
   'src/frontend/app/api/actionbridge/setup-links/route.ts',
+  'src/frontend/app/api/actionbridge/setup-session/route.ts',
 ];
 for (const file of routeFiles) {
   if (!exists(file)) fail(`Missing ActionBridge route: ${file}`);
@@ -237,6 +246,7 @@ if (!process.exitCode) {
   const toolCatalogRoute = read('src/frontend/app/api/actionbridge/tool-catalog/route.ts');
   const connectorVerifyRoute = read('src/frontend/app/api/actionbridge/connectors/verify/route.ts');
   const setupLinksRoute = read('src/frontend/app/api/actionbridge/setup-links/route.ts');
+  const setupSessionRoute = read('src/frontend/app/api/actionbridge/setup-session/route.ts');
   for (const [name, source] of [['actions', actionsRoute], ['connectors', connectorsRoute], ['execute', executeRoute], ['approvals', approvalsRoute], ['audit', auditRoute], ['executions', executionsRoute]]) {
     if (!source.includes('createClient')) fail(`${name} route must use Supabase server auth`);
     if (!source.includes('auth.getUser')) fail(`${name} route must require authenticated user`);
@@ -292,6 +302,10 @@ if (!process.exitCode) {
     if (!setupLinksRoute.includes(token)) fail(`setup-links route missing ${token}`);
   }
   if (setupLinksRoute.includes('token_digest,') || setupLinksRoute.includes('token_digest)')) fail('setup-links route must not select/return token_digest');
+  for (const token of ['digestActionBridgeSetupSessionToken', 'createActionBridgeSetupSessionView', 'isActionBridgeSetupSessionUsable', 'ACTIONBRIDGE_SETUP_SESSION_NOT_FOUND', "status: 'opened'"]) {
+    if (!setupSessionRoute.includes(token)) fail(`setup-session route missing ${token}`);
+  }
+  if (setupSessionRoute.includes('user_id') || setupSessionRoute.includes('secret_ref')) fail('public setup-session route must not select user_id or secrets');
   for (const token of ['actionbridge_connector_verifications', 'createActionBridgeVerificationChallenge', 'verifyActionBridgeDomainChallenge', 'digestActionBridgeVerificationToken', 'network_execution_enabled: true', "safety_status: 'pass'", "permission_status: 'active'", ".eq('user_id', user!.id)"]) {
     if (!connectorVerifyRoute.includes(token)) fail(`connector verification route missing ${token}`);
   }

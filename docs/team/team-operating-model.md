@@ -26,10 +26,15 @@
 ## Product Thesis
 API-Key = for programmers. ActionBridge = for agents.
 
-No-key websites are still connectable through Website Bridge:
+ActionBridge is the Universal Agent Connector OS for Schwarzwald-Agent: every customer-approved digital capability should become a safe JSON-like agent tool with scope, risk, approval, audit, redaction, and kill-switches.
+
+Website Bridge is the first no-key path, not the whole product:
 - Observe public content.
+- Translate forms/routes/offers into read/draft agent tools.
 - Assist with drafts/forms.
 - Act only through widget/session/approval.
+
+Other paths follow the same action-language model: API/OAuth, MCP, widgets, browser/RPA, webhooks, CRM, shop, calendar, inbox.
 
 ## Audit Finding Template
 - Target

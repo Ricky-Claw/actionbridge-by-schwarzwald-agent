@@ -1,15 +1,18 @@
 # ActionBridge by Schwarzwald-Agent
 
-Universal agent connector layer: APIs, OAuth, MCP, websites, widgets, browser/RPA and REST normalized into safe, typed, auditable agent actions.
+Universal Agent Connector OS: APIs, OAuth, MCP, websites, widgets, browser/RPA, webhooks, REST, forms, shops, calendars, inboxes and customer apps normalized into safe, typed, auditable agent actions.
 
 > API-Key = für Programmierer. ActionBridge = für Agents.
+
+North star: ActionBridge translates every customer-approved digital capability into agent-language JSON tool schemas with policy, approval, redaction, audit and kill-switches built in. The Website Bridge is only the first probe; the product goal is the universal connector layer for Schwarzwald-Agent.
 
 ## Included
 
 - Product/design spec
+- Universal Connector OS north-star spec
 - MVP implementation plan
 - ActionBridge API + frontend skeleton code
-- Policy/redaction/HTTP connector skeleton
+- Policy/redaction/HTTP + Website connector guardrail skeletons
 - Supabase migrations for connectors/actions/approvals/audit state
 - Contract test script
 - Agent operating model: Breaker, Sentinel, Nexus

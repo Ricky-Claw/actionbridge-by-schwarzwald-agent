@@ -1,12 +1,14 @@
 # F26 ActionBridge — Universal Agent Connector Design
 
 ## Goal
-Build **ActionBridge**, a universal connector layer that makes customer systems agent-capable without creating 200 bespoke integrations.
+Build **ActionBridge**, a Universal Agent Connector OS that makes customer systems agent-capable without creating 200 bespoke integrations.
 
-ActionBridge turns customer capabilities into safe, typed, auditable **agent actions** such as `find_product`, `check_availability`, `create_cart`, `book_appointment`, `create_ticket`, or `request_quote`.
+ActionBridge turns customer-approved digital capabilities into safe, typed, auditable **agent actions** such as `find_product`, `check_availability`, `create_cart`, `book_appointment`, `create_ticket`, or `request_quote`.
+
+The big goal is not only an HTTP connector or a website scraper. The big goal is translation: websites, forms, APIs, OAuth apps, MCP servers, widgets, browser/RPA flows, webhooks, CRMs, shops, calendars and inboxes become one consistent agent-language tool catalog.
 
 ## Core Insight
-APIs are developer language. Agents need action language.
+APIs, DOMs, forms, widgets, OAuth scopes, MCP tools and browser flows are system language. Agents need action language.
 
 Instead of exposing raw API keys, REST endpoints, OAuth complexity, or one-off integrations, ActionBridge gives agents a constrained action interface:
 
@@ -48,6 +50,27 @@ Useful patterns:
 Name conflict:
 - `AgentLink` and `AgentGate` are too close/occupied. Use **ActionBridge** as product name.
 
+## North Star
+
+ActionBridge receives a customer-approved surface and emits JSON-like agent tool schemas:
+
+```json
+{
+  "name": "customer.lead.prepare_draft",
+  "description": "Prepare a lead/contact request from a customer conversation.",
+  "riskLevel": "write",
+  "requiresApproval": true,
+  "inputSchema": [
+    { "name": "name", "type": "string", "required": true, "description": "Customer name" },
+    { "name": "email", "type": "string", "required": true, "description": "Customer email" },
+    { "name": "message", "type": "string", "required": true, "description": "Request details" }
+  ],
+  "executor": { "type": "website_form_draft", "networkExecution": false }
+}
+```
+
+This tool catalog can power Schwarzwald-Agent in a website chatbot widget, internal console, automation workflow or future MCP-compatible interface.
+
 ## MVP Scope
 Build universal foundation, not individual connectors.
 
@@ -57,9 +80,11 @@ Build universal foundation, not individual connectors.
    - Risk level: `read`, `write`, `transactional`, `destructive`.
    - Required permission and approval policy.
 
-2. **HTTP Action Connector**
-   - Maps an ActionBridge action to an HTTP request.
-   - Supports GET/POST initially.
+2. **Connector Adapters**
+   - HTTP/API connector maps actions to server-side HTTP requests.
+   - Website connector observes public pages/forms and proposes read/draft actions.
+   - Widget connector exposes the assistant on customer websites.
+   - Future adapters: OAuth, MCP, Browser/RPA, webhooks, CRM/shop/calendar/inbox.
    - Server-side secret storage only.
    - Response mapping to agent-friendly output.
 
@@ -81,13 +106,16 @@ Build universal foundation, not individual connectors.
    - MCP-compatible shape later; do not overbuild full public MCP server in first slice.
 
 7. **Widget/SDK Contract**
-   - Customer site can expose allowed actions or pass context.
+   - Customer site can open Schwarzwald-Agent as a chatbot/assistant window.
+   - Widget passes signed context and receives agent responses.
+   - Agent can call ActionBridge tools for read/draft/approved actions.
    - No secrets in browser.
    - Signed short-lived session/action tokens.
 
 ## Non-Goals for MVP
 - No Amazon/Booking direct production integration.
 - No full marketplace.
+- No claim that every website can be bypassed; unsupported or unsafe surfaces must block with a clear reason.
 - No public MCP server until security model passes review.
 - No F21/F22/F24 work.
 - No browser-stored customer secrets.
@@ -169,8 +197,12 @@ Deferred:
 5. What is the minimum safe DNS pinning + tenant allowlist model for enabling real HTTP execution?
 
 ## Recommendation
-Start with **product search + request quote** demo action:
-- Search = read, instant.
-- Request quote = write, approval gated.
+Prove the full translation loop, not just one connector:
 
-This proves the universal action model without payment/booking liability.
+1. Website/setup input creates a public business profile.
+2. Profile compiles into JSON agent tools.
+3. Schwarzwald-Agent widget can answer questions from the profile.
+4. The agent can prepare a contact/request quote draft.
+5. Any send/write action is approval-gated and audited.
+
+This proves the universal action model without payment/booking liability, while keeping the north star pointed at every customer-approved digital surface.

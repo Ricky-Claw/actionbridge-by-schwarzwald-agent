@@ -5,7 +5,7 @@ Status: Product north star / alignment spec
 
 ## One-Line Vision
 
-ActionBridge turns any customer-facing digital surface into safe, typed, auditable agent tools.
+ActionBridge turns any customer-approved website, URL, app, plugin, backend capability, or digital surface into safe, typed, auditable agent tools that Schwarzwald-Agent can use and execute under policy.
 
 ## Core Thesis
 
@@ -34,18 +34,21 @@ ActionBridge is the translation layer:
 }
 ```
 
-The agent should not need to understand raw APIs, DOM selectors, OAuth mechanics, form fields, RPA clicks, or customer-system quirks. It receives a constrained tool catalog with policy, approvals, audit, and redaction built in.
+The agent should not need to understand raw APIs, DOM selectors, OAuth mechanics, form fields, RPA clicks, backend quirks, or customer-system internals. It receives a constrained tool catalog with policy, approvals, audit, and redaction built in.
+
+ActionBridge is not “API-first.” APIs are only one path. The core product must also support a simple website/plugin path: the customer proves authorization for a domain, installs a lightweight bridge script/plugin/SDK when deeper capabilities are needed, activates capabilities, and Schwarzwald-Agent can then answer questions or perform approved actions through ActionBridge.
 
 ## Product Outcome
 
 Schwarzwald-Agent becomes usable by any SME because onboarding becomes:
 
-1. Customer enters website/API/app connection details.
-2. ActionBridge observes or imports capabilities.
-3. ActionBridge translates them into agent-safe JSON tool schemas.
-4. Sentinel policy assigns risk, approval, and execution boundaries.
-5. Nexus builds/activates connector actions only inside those guardrails.
-6. The customer can expose the assistant through widget, internal console, API, or workflow automation.
+1. Customer enters a website, URL, app, shop, calendar, inbox, or backend target.
+2. Customer proves authorization/ownership via Meta tag, DNS TXT, well-known file, OAuth consent, or approved account flow.
+3. If capabilities require site/backend access, customer installs the simplest bridge: one-line script, platform plugin, or small SDK adapter.
+4. ActionBridge observes/imports exposed capabilities and translates them into agent-safe JSON tool schemas.
+5. Sentinel policy assigns risk, approval, redaction, rate limits, audit, and execution boundaries.
+6. Nexus builds/activates connector actions only inside those guardrails.
+7. The customer can expose Schwarzwald-Agent through chatbot/widget, internal console, API, or workflow automation.
 
 ## Connector Surfaces
 
@@ -54,6 +57,7 @@ ActionBridge is not one connector. It is a connector OS with multiple adapters t
 | Surface | Purpose | Default Mode |
 |---|---|---|
 | Website Bridge | Public pages, forms, offers, FAQ, routes | Observe / draft |
+| Site Plugin / Script Bridge | One-line script/plugin/SDK installed by customer to expose approved site/backend capabilities | Converse / read / draft / approved act |
 | Widget Bridge | Chatbot/assistant embedded on customer site | Converse / draft / approved act |
 | HTTP/API Bridge | REST/JSON endpoints | Read; writes approval-gated |
 | OAuth Bridge | User/customer-authorized SaaS APIs | Least privilege scopes |
@@ -92,13 +96,13 @@ Customer inputs a website or integration target. ActionBridge returns:
 
 ### Chatbot / Assistant Widget
 
-Customer embeds:
+Customer verifies the domain and embeds a lightweight bridge/widget script or installs a platform plugin:
 
 ```html
-<script src="https://actionbridge.example/widget.js" data-agent="customer-agent-id"></script>
+<script src="https://actionbridge.example/bridge.js" data-site-id="customer-site-id" async></script>
 ```
 
-The widget speaks to Schwarzwald-Agent. The agent uses ActionBridge tools to answer, draft, and — only with policy approval — act.
+The bridge can power a Schwarzwald-Agent chatbot and expose customer-approved capabilities such as public knowledge access, lead capture, appointment requests, order-status lookup, support-ticket creation, or other backend actions registered by a plugin/SDK. The agent uses ActionBridge tools to answer, draft, and — only with policy approval — act.
 
 ### Internal Agent Console
 
@@ -150,10 +154,10 @@ The true MVP should prove the full translation loop:
 
 ## Non-Negotiable Product Boundary
 
-ActionBridge is not sold as stealth scraping or bypass automation.
+ActionBridge is not sold as stealth scraping, login bypass, paywall bypass, or unauthorized automation.
 
 It is sold as:
 
-> Universal Agent Connector OS: safe agent access to customer-approved digital capabilities.
+> Universal Agent Connector OS: safe agent access and execution for customer-approved digital capabilities.
 
-That positioning protects the product, the customer, and Schwarzwald-Agent.
+Meta/DNS/well-known proves authorization. Bridge script/plugin/SDK provides hands. Policy/approval/audit/redaction/kill-switches provide control. That positioning protects the product, the customer, and Schwarzwald-Agent.

@@ -15,23 +15,24 @@ export default function ActionBridgeOperatorPage() {
 
         <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
           <h2 className="text-xl font-semibold">Setup link generator</h2>
-          <form className="mt-5 grid gap-4 md:grid-cols-[1fr_auto]" action="/api/actionbridge/setup-links" method="post">
+          <div className="mt-5 grid gap-4 md:grid-cols-[1fr_auto]">
             <label className="space-y-2">
               <span className="text-sm text-slate-300">Customer origin</span>
               <input
                 name="targetOrigin"
                 type="url"
-                required
-                placeholder="https://customer.example"
-                className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 outline-none focus:border-cyan-300"
+                readOnly
+                value="https://demo-customer.example"
+                className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100 outline-none"
               />
             </label>
-            <button className="self-end rounded-2xl bg-cyan-300 px-5 py-3 font-semibold text-slate-950" type="submit">
-              Create setup link
+            <button className="self-end rounded-2xl bg-cyan-300 px-5 py-3 font-semibold text-slate-950 opacity-80" type="button">
+              JSON API next
             </button>
-          </form>
+          </div>
           <p className="mt-4 text-sm text-amber-100">
-            Production note: the raw setup token may be shown once after creation only. Stored state must stay digest-only.
+            Quality rule: this shell does not submit a native HTML form because the setup-link endpoint expects JSON.
+            Production integration should call the API client-side/server-action style and show the raw setup token once.
           </p>
         </section>
 

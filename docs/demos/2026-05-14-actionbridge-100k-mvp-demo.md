@@ -16,6 +16,8 @@ Do not run live network execution against third-party sites during the demo unle
 
 ## Storyboard
 
+MVP click-path: Setup-Link → Domain-Verifikation → Bridge-Handshake → Tool-Catalog → Dry-run Execution → Audit/Kill switches.
+
 ### 1. Operator creates customer setup link
 
 Ricky/operator opens the future Schwarzwald-Agent dashboard integration and creates an ActionBridge setup link for the customer origin.

@@ -56,7 +56,7 @@ export function createActionBridgeSetupSessionView(record: ActionBridgeSetupSess
     })),
     bridgeInstall: {
       mode: 'script_pending',
-      snippet: `<script src="https://actionbridge.schwarzwald-agent.de/bridge.js" data-site-id="${record.id}" async></script>`,
+      snippet: `<script src="https://actionbridge.schwarzwald-agent.de/actionbridge/bridge.js" data-setup-token="SETUP_TOKEN_SHOWN_ONCE" async></script>`,
     },
     capabilityChoices: [
       { name: 'site.knowledge.read', label: 'Website-Wissen lesen', riskLevel: 'read', requiresApproval: false },

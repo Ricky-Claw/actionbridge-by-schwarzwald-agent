@@ -12,6 +12,15 @@ const fail = (msg) => { failed += 1; console.error(`❌ ${msg}`); };
 const orderedDemoPages = [
   'src/frontend/app/actionbridge/operator/page.tsx',
   'src/frontend/app/actionbridge/setup/page.tsx',
+  'src/frontend/app/actionbridge/pitch/page.tsx',
+  'src/frontend/app/actionbridge/wizard/page.tsx',
+  'src/frontend/app/actionbridge/permissions/page.tsx',
+  'src/frontend/app/actionbridge/demo-tenant/page.tsx',
+  'src/frontend/app/actionbridge/trust/page.tsx',
+  'src/frontend/app/actionbridge/audit-preview/page.tsx',
+  'src/frontend/app/actionbridge/tool-preview/page.tsx',
+  'src/frontend/app/actionbridge/failures/page.tsx',
+  'src/frontend/app/actionbridge/sales/page.tsx',
 ];
 
 for (const file of orderedDemoPages) {
@@ -53,14 +62,17 @@ else {
   }
 }
 
-const operatorPage = read('src/frontend/app/actionbridge/operator/page.tsx');
-const setupPage = read('src/frontend/app/actionbridge/setup/page.tsx');
+const uiSource = orderedDemoPages.map(read).join('\n');
 for (const token of ['Setup-Link', 'Domain-Verifikation', 'Bridge-Handshake', 'Tool-Catalog', 'Dry-run Execution', 'Audit']) {
-  if (`${operatorPage}\n${setupPage}`.toLowerCase().includes(token.toLowerCase())) pass(`100k MVP UI covers: ${token}`);
+  if (uiSource.toLowerCase().includes(token.toLowerCase())) pass(`100k MVP UI covers: ${token}`);
   else fail(`100k MVP UI missing: ${token}`);
 }
+for (const token of ['Every approved website becomes a safe agent tool', 'Permission Matrix', 'Customer Setup Wizard', 'Controlled Demo Tenant', 'Trust Center', 'Audit Timeline', 'Agent Tool Preview', 'Failure-State UX', 'One-page Sales Narrative']) {
+  if (uiSource.toLowerCase().includes(token.toLowerCase())) pass(`ActionBridge experience covers: ${token}`);
+  else fail(`ActionBridge experience missing: ${token}`);
+}
 for (const forbidden of ['token_digest', 'service_role', 'secret_ref', 'idempotency_key', 'document.cookie', 'localStorage']) {
-  if (`${operatorPage}\n${setupPage}`.includes(forbidden)) fail(`100k MVP UI contains forbidden sensitive/internal marker: ${forbidden}`);
+  if (uiSource.includes(forbidden)) fail(`100k MVP UI contains forbidden sensitive/internal marker: ${forbidden}`);
 }
 
 const setupSession = read('src/frontend/lib/actionbridge/setup-session.ts');

@@ -1,0 +1,18 @@
+{
+  "name": "actionbridge-by-schwarzwald-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ActionBridge universal connector and execution-control layer for Schwarzwald-Agent.",
+  "type": "module",
+  "scripts": {
+    "test": "npm run test:contracts && npm run test:security && npm run test:dns-ip && npm run test:visibility-sanitizer",
+    "test:contracts": "node scripts/test-actionbridge-contracts.mjs",
+    "test:security": "node scripts/test-actionbridge-security-gauntlet.mjs",
+    "test:dns-ip": "node scripts/test-actionbridge-dns-ip-guard.mjs",
+    "test:visibility-sanitizer": "node scripts/test-actionbridge-visibility-sanitizer.mjs",
+    "check": "npm test && git diff --check"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

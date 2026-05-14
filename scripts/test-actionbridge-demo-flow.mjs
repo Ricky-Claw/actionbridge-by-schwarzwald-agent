@@ -9,6 +9,16 @@ let failed = 0;
 const pass = (msg) => console.log(`✅ ${msg}`);
 const fail = (msg) => { failed += 1; console.error(`❌ ${msg}`); };
 
+const orderedDemoPages = [
+  'src/frontend/app/actionbridge/operator/page.tsx',
+  'src/frontend/app/actionbridge/setup/page.tsx',
+];
+
+for (const file of orderedDemoPages) {
+  if (exists(file)) pass(`100k MVP page exists: ${file}`);
+  else fail(`100k MVP page missing: ${file}`);
+}
+
 const orderedDemoRoutes = [
   'src/frontend/app/api/actionbridge/setup-links/route.ts',
   'src/frontend/app/api/actionbridge/setup-session/route.ts',
@@ -41,6 +51,16 @@ else {
     if (doc.toLowerCase().includes(token.toLowerCase())) pass(`100k MVP doc covers: ${token}`);
     else fail(`100k MVP doc missing: ${token}`);
   }
+}
+
+const operatorPage = read('src/frontend/app/actionbridge/operator/page.tsx');
+const setupPage = read('src/frontend/app/actionbridge/setup/page.tsx');
+for (const token of ['Setup-Link', 'Domain-Verifikation', 'Bridge-Handshake', 'Tool-Catalog', 'Dry-run Execution', 'Audit']) {
+  if (`${operatorPage}\n${setupPage}`.toLowerCase().includes(token.toLowerCase())) pass(`100k MVP UI covers: ${token}`);
+  else fail(`100k MVP UI missing: ${token}`);
+}
+for (const forbidden of ['token_digest', 'service_role', 'secret_ref', 'idempotency_key', 'document.cookie', 'localStorage']) {
+  if (`${operatorPage}\n${setupPage}`.includes(forbidden)) fail(`100k MVP UI contains forbidden sensitive/internal marker: ${forbidden}`);
 }
 
 const setupSession = read('src/frontend/lib/actionbridge/setup-session.ts');

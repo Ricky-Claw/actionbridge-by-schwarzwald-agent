@@ -17,6 +17,7 @@ import { executeActionBridgeReadOnlyGet } from '@/lib/actionbridge/read-only-exe
 import { persistActionBridgeLeadSubmission } from '@/lib/actionbridge/lead-submission';
 import { deliverActionBridgeWebhook } from '@/lib/actionbridge/webhook-delivery';
 import { decideActionBridgeWebhookDeliveryThrottle, recordActionBridgeWebhookFailureQuarantine } from '@/lib/actionbridge/rate-limit';
+import { persistActionBridgeErrorEvent } from '@/lib/actionbridge/error-log';
 
 async function requireActionBridgeUser() {
   const supabase = await createClient();
@@ -78,6 +79,15 @@ export async function POST(request: NextRequest) {
     });
 
     if (consumed.error || !consumed.execution) {
+      await persistActionBridgeErrorEvent(serviceSupabase, {
+        userId: user!.id,
+        approvalId,
+        category: 'approval',
+        severity: 'medium',
+        errorCode: 'ACTIONBRIDGE_APPROVAL_NOT_EXECUTABLE',
+        message: 'Approval execution was blocked because the approval was missing, expired, rejected, already consumed, or not approved.',
+        context: { approvalId, consumedError: consumed.error },
+      });
       return NextResponse.json({
         error: 'ACTIONBRIDGE_APPROVAL_NOT_EXECUTABLE',
         reason: 'Approval is not approved, already consumed, rejected, expired, or missing.',
@@ -197,6 +207,17 @@ export async function POST(request: NextRequest) {
           }
           if (!webhookResult.ok) {
             finalExecutionStatus = 'failed';
+            await persistActionBridgeErrorEvent(serviceSupabase, {
+              userId: user!.id,
+              connectorId: webhookConnector.id,
+              executionId,
+              approvalId: consumed.execution.approvalId,
+              category: webhookResult.status === 429 ? 'rate_limit' : 'webhook',
+              severity: webhookResult.status === 429 ? 'low' : 'medium',
+              errorCode: webhookResult.status === 429 ? 'ACTIONBRIDGE_WEBHOOK_RATE_LIMITED' : 'ACTIONBRIDGE_WEBHOOK_DELIVERY_FAILED',
+              message: webhookResult.status === 429 ? 'Webhook-v1 delivery was throttled by pilot rate limits.' : 'Webhook-v1 delivery failed or returned a non-success response.',
+              context: { webhook: webhookResult.resultSummary, destinationOrigin: webhookDestinationOrigin, actionName: consumed.execution.actionName },
+            });
             const quarantine = recordActionBridgeWebhookFailureQuarantine({
               request,
               tenantId: user!.id,

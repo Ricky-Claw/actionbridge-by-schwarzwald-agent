@@ -258,3 +258,22 @@ for (const token of ['allowed_origins JSONB NOT NULL DEFAULT', 'capabilities JSO
 for (const r of results) console.log(`${r.ok ? '✅' : '❌'} ${r.name}${r.detail ? ` — ${r.detail}` : ''}`);
 console.log(`\nPayloads tried: ${privateCases.map(([, u]) => u).join(', ')}`);
 process.exit(failed ? 1 : 0);
+
+
+const errorLog = read('src/frontend/lib/actionbridge/error-log.ts');
+for (const token of ['persistActionBridgeErrorEvent', 'redactActionBridgeValue', 'ActionBridgeErrorSeverity', 'critical', 'redacted_context', 'actionbridge_error_logs']) {
+  if (errorLog.includes(token)) pass(`error-log security marker: ${token}`);
+  else fail(`error-log missing security marker: ${token}`);
+}
+if (errorLog.includes('secretValue') || errorLog.includes('idempotency_key')) fail('error-log must not expose raw secrets or raw idempotency keys');
+const errorsRoute = read('src/frontend/app/api/actionbridge/errors/route.ts');
+for (const token of ['auth.getUser', 'UNAUTHORIZED', 'actionbridge_error_logs', ".eq('user_id', user!.id)", 'toActionBridgeErrorLogView', 'ACTIONBRIDGE_ERROR_LOG_LIST_FAILED']) {
+  if (errorsRoute.includes(token)) pass(`errors route security marker: ${token}`);
+  else fail(`errors route missing security marker: ${token}`);
+}
+if (errorsRoute.includes('token_digest') || errorsRoute.includes('secret_ref') || errorsRoute.includes('idempotency_key')) fail('errors route must not select secrets, token digests, or raw idempotency keys');
+const errorMigration = read('supabase/migrations/20260515000400_actionbridge_error_logs.sql');
+for (const token of ['actionbridge_error_logs', 'ENABLE ROW LEVEL SECURITY', 'auth.uid() = user_id', 'redacted_context', "severity IN ('info', 'low', 'medium', 'high', 'critical')", "category IN ('setup', 'verification', 'approval', 'execution', 'webhook', 'rate_limit', 'system')"]) {
+  if (errorMigration.includes(token)) pass(`error-log migration marker: ${token}`);
+  else fail(`error-log migration missing marker: ${token}`);
+}

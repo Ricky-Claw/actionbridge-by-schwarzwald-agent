@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ActionBridgeDecision, ActionBridgeRiskLevel } from './types';
 import { actionBridgeAuditTaxonomy } from './audit-taxonomy';
 import { redactActionBridgeValue } from './redaction';
+import { persistActionBridgeErrorEvent } from './error-log';
 
 interface ActionBridgePersistenceBase {
   userId: string;
@@ -214,6 +215,19 @@ export async function persistActionBridgeExecutionResult(
       networkExecution: false,
     },
   });
+
+  if (input.status === 'failed') {
+    await persistActionBridgeErrorEvent(supabase, {
+      userId: row.user_id,
+      executionId: input.executionId,
+      approvalId: row.approval_id,
+      category: row.error_code?.includes('WEBHOOK') ? 'webhook' : 'execution',
+      severity: row.error_code?.includes('WEBHOOK') ? 'medium' : 'high',
+      errorCode: row.error_code || input.errorCode || 'ACTIONBRIDGE_EXECUTION_FAILED',
+      message: 'ActionBridge execution failed. Check redacted context and audit trail.',
+      context: { actionName: row.action_name, riskLevel: row.risk_level, safeResult: row.safe_result, errorCode: row.error_code || input.errorCode },
+    });
+  }
 
   return { error: audit.error };
 }

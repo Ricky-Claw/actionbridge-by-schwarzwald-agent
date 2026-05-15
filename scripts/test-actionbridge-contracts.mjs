@@ -307,6 +307,7 @@ const routeFiles = [
   'src/frontend/app/api/actionbridge/approvals/route.ts',
   'src/frontend/app/api/actionbridge/audit/route.ts',
   'src/frontend/app/api/actionbridge/executions/route.ts',
+  'src/frontend/app/api/actionbridge/errors/route.ts',
   'src/frontend/app/api/actionbridge/setup-profile/route.ts',
   'src/frontend/app/api/actionbridge/tool-catalog/route.ts',
   'src/frontend/app/api/actionbridge/connectors/verify/route.ts',
@@ -329,6 +330,7 @@ if (!process.exitCode) {
   const approvalsRoute = read('src/frontend/app/api/actionbridge/approvals/route.ts');
   const auditRoute = read('src/frontend/app/api/actionbridge/audit/route.ts');
   const executionsRoute = read('src/frontend/app/api/actionbridge/executions/route.ts');
+  const errorsRoute = read('src/frontend/app/api/actionbridge/errors/route.ts');
   const setupProfileRoute = read('src/frontend/app/api/actionbridge/setup-profile/route.ts');
   const toolCatalogRoute = read('src/frontend/app/api/actionbridge/tool-catalog/route.ts');
   const connectorVerifyRoute = read('src/frontend/app/api/actionbridge/connectors/verify/route.ts');
@@ -338,7 +340,7 @@ if (!process.exitCode) {
   const bridgeScriptRoute = read('src/frontend/app/actionbridge/bridge.js/route.ts');
   const capabilitiesRoute = read('src/frontend/app/api/actionbridge/capabilities/route.ts');
   const agentToolsRoute = read('src/frontend/app/api/actionbridge/agent-tools/route.ts');
-  for (const [name, source] of [['actions', actionsRoute], ['connectors', connectorsRoute], ['execute', executeRoute], ['approvals', approvalsRoute], ['audit', auditRoute], ['executions', executionsRoute]]) {
+  for (const [name, source] of [['actions', actionsRoute], ['connectors', connectorsRoute], ['execute', executeRoute], ['approvals', approvalsRoute], ['audit', auditRoute], ['executions', executionsRoute], ['errors', errorsRoute]]) {
     if (!source.includes('createClient')) fail(`${name} route must use Supabase server auth`);
     if (!source.includes('auth.getUser')) fail(`${name} route must require authenticated user`);
     if (!source.includes('UNAUTHORIZED')) fail(`${name} route must fail closed when unauthenticated`);
@@ -381,7 +383,10 @@ if (!process.exitCode) {
   for (const token of ['actionbridge_executions', ".eq('user_id', user!.id)", 'safe_result', 'sanitizeActionBridgeVisibilityResult(value)', 'ACTIONBRIDGE_EXECUTIONS_LIST_FAILED']) {
     if (!executionsRoute.includes(token)) fail(`executions route missing safe visibility token ${token}`);
   }
-  if (auditRoute.includes('idempotency_key') || executionsRoute.includes('idempotency_key') || executionsRoute.includes('...result')) fail('visibility routes must not return raw idempotency keys or spread stored result JSON');
+  for (const token of ['actionbridge_error_logs', ".eq('user_id', user!.id)", 'toActionBridgeErrorLogView', 'normalizeActionBridgeErrorCategory', 'normalizeActionBridgeErrorSeverity', 'ACTIONBRIDGE_ERROR_LOG_LIST_FAILED']) {
+    if (!errorsRoute.includes(token)) fail(`errors route missing safe visibility token ${token}`);
+  }
+  if (auditRoute.includes('idempotency_key') || executionsRoute.includes('idempotency_key') || errorsRoute.includes('idempotency_key') || executionsRoute.includes('...result')) fail('visibility routes must not return raw idempotency keys or spread stored result JSON');
   for (const token of ['normalizeActionBridgeSetupProfile', 'ACTIONBRIDGE_SECRET_STORAGE_NOT_CONFIGURED', 'INVALID_ACTIONBRIDGE_SETUP_PROFILE']) {
     if (!setupProfileRoute.includes(token)) fail(`setup-profile route missing ${token}`);
   }
@@ -430,6 +435,7 @@ if (!migrationFiles.length) {
     'actionbridge_actions',
     'actionbridge_approvals',
     'actionbridge_audit_logs',
+    'actionbridge_error_logs',
   ]) {
     if (!migration.includes(table)) fail(`ActionBridge migration missing table ${table}`);
   }
@@ -454,11 +460,12 @@ if (!migrationFiles.length) {
 
 if (exists('src/frontend/lib/actionbridge/persistence.ts')) {
   const persistence = read('src/frontend/lib/actionbridge/persistence.ts');
-  for (const fn of ['persistActionBridgeAuditEvent', 'createActionBridgeApproval']) {
+  for (const fn of ['persistActionBridgeAuditEvent', 'createActionBridgeApproval', 'persistActionBridgeErrorEvent']) {
     if (!persistence.includes(fn)) fail(`persistence.ts missing ${fn}`);
   }
   if (!persistence.includes('redactActionBridgeValue')) fail('persistence must redact before insert');
   if (!persistence.includes('actionbridge_audit_logs')) fail('persistence must write audit logs');
+  if (!persistence.includes('actionbridge_error_logs') && !persistence.includes('./error-log')) fail('persistence must write or delegate error logs');
   if (!persistence.includes('actionbridge_approvals')) fail('persistence must write approvals');
   if (!persistence.includes('action_snapshot') || !persistence.includes('connector_id') || !persistence.includes('networkExecution: false')) fail('persistence must bind immutable approval snapshots with connector ownership context');
   if (!process.exitCode) pass('ActionBridge persistence helpers write approvals, immutable snapshots, and redacted audit logs');
@@ -640,3 +647,12 @@ if (migrationFiles.length) {
 }
 
 process.exit(process.exitCode || 0);
+
+
+if (exists('src/frontend/app/actionbridge/failures/page.tsx')) {
+  const failuresPage = read('src/frontend/app/actionbridge/failures/page.tsx');
+  for (const token of ['Error Log & Failure Monitor', '/api/actionbridge/errors', 'category', 'severity', 'error code', 'High/Critical errors', 'raw tokens']) {
+    if (!failuresPage.includes(token)) fail(`failures page missing error-monitor token ${token}`);
+  }
+  if (!process.exitCode) pass('ActionBridge failure page documents real error monitor and safe debugging fields');
+}

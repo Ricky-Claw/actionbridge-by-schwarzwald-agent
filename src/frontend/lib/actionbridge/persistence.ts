@@ -51,6 +51,15 @@ export interface PersistActionBridgeExecutionResultInput {
   errorCode?: string | null;
 }
 
+export interface PersistActionBridgeControlAuditEventInput {
+  userId: string;
+  connectorId?: string | null;
+  eventName: string;
+  input?: unknown;
+  status: 'pending' | 'succeeded' | 'failed' | 'denied';
+  resultSummary?: Record<string, unknown> | null;
+}
+
 export async function createActionBridgeApproval(
   supabase: SupabaseClient,
   input: CreateActionBridgeApprovalInput
@@ -102,6 +111,26 @@ export async function persistActionBridgeAuditEvent(
     });
 
   return { error: error?.message || null };
+}
+
+export async function persistActionBridgeControlAuditEvent(
+  supabase: SupabaseClient,
+  input: PersistActionBridgeControlAuditEventInput
+): Promise<{ error: string | null }> {
+  return persistActionBridgeAuditEvent(supabase, {
+    userId: input.userId,
+    connectorId: input.connectorId || null,
+    actionName: input.eventName,
+    riskLevel: 'read',
+    input: input.input || {},
+    decision: input.status === 'denied' || input.status === 'failed' ? 'deny' : 'allow',
+    status: input.status,
+    resultSummary: {
+      ...(input.resultSummary || {}),
+      controlPlane: true,
+      networkExecution: false,
+    },
+  });
 }
 
 // DB RPC enforces: only approved approvals enter executing; rejected/expired never execute.

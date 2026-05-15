@@ -25,6 +25,7 @@ const requiredFiles = [
   'src/frontend/lib/actionbridge/tool-catalog.ts',
   'src/frontend/lib/actionbridge/schema-safety.ts',
   'src/frontend/lib/actionbridge/read-only-executor.ts',
+  'src/frontend/lib/actionbridge/lead-submission.ts',
   'src/frontend/lib/actionbridge/domain-verification.ts',
   'src/frontend/lib/actionbridge/setup-links.ts',
   'src/frontend/lib/actionbridge/setup-session.ts',
@@ -150,10 +151,17 @@ if (!process.exitCode) {
   for (const forbidden of ["method: 'POST'", 'secretValue', 'form.submit', 'StealthyFetcher']) {
     if (readOnlyExecutor.includes(forbidden)) fail(`read-only executor must not include ${forbidden}`);
   }
-  if (!process.exitCode) pass('ActionBridge read-only executor enforces DNS, allowlist, timeout, redirects, limits, and redaction');
+  const leadSubmission = read('src/frontend/lib/actionbridge/lead-submission.ts');
+  for (const token of ['createActionBridgeLeadSubmissionDraft', 'persistActionBridgeLeadSubmission', 'lead.submit', 'actionbridge_lead_submissions', 'actionbridge_outbox', 'redactActionBridgeValue']) {
+    if (!leadSubmission.includes(token)) fail(`lead-submission.ts missing ${token}`);
+  }
+  for (const forbidden of ['fetch(', 'form.submit', 'StealthyFetcher', 'credentials']) {
+    if (leadSubmission.includes(forbidden)) fail(`lead-submission must not perform unsafe external delivery: ${forbidden}`);
+  }
+  if (!process.exitCode) pass('ActionBridge lead submission creates approval-gated outbox records without external form submit');
 
   const capabilityRules = read('src/frontend/lib/actionbridge/capability-rules.ts');
-  for (const token of ['ACTIONBRIDGE_CAPABILITY_DEFINITIONS', 'site.knowledge.read', 'lead.prepare_draft', 'appointment.request.prepare_draft', 'requiresApproval: true', 'riskLevel: \'write\'', 'sanitizeActionBridgeInputSchema', 'compileActionBridgeCapabilityTool']) {
+  for (const token of ['ACTIONBRIDGE_CAPABILITY_DEFINITIONS', 'site.knowledge.read', 'lead.prepare_draft', 'lead.submit', 'appointment.request.prepare_draft', 'requiresApproval: true', 'riskLevel: \'write\'', 'sanitizeActionBridgeInputSchema', 'compileActionBridgeCapabilityTool']) {
     if (!capabilityRules.includes(token)) fail(`capability-rules.ts missing ${token}`);
   }
   if (capabilityRules.includes('transactional') || capabilityRules.includes('destructive') || capabilityRules.includes('form.submit') || capabilityRules.includes('calendar write')) fail('capability rules v1 must not expose transactional/destructive execution');
@@ -232,6 +240,23 @@ if (!process.exitCode) {
   if (!process.exitCode) pass('ActionBridge audit taxonomy covers policy, approval, target, control, and execution-result events');
 }
 
+
+if (!exists('ACTIONBRIDGE_GOAL.md')) fail('Missing ACTIONBRIDGE_GOAL.md');
+else {
+  const goal = read('ACTIONBRIDGE_GOAL.md');
+  for (const token of ['Connector-', 'kein CRM', 'Keine Lead-Outbox-UI', 'Webhook-v1', 'standalone DoD']) {
+    if (!goal.includes(token)) fail(`ACTIONBRIDGE_GOAL.md missing connector-scope marker: ${token}`);
+  }
+  if (!process.exitCode) pass('ACTIONBRIDGE_GOAL.md defines connector-only standalone product scope');
+}
+if (!exists('docs/actionbridge-pilot-runbook.md')) fail('Missing ActionBridge pilot runbook');
+else {
+  const runbook = read('docs/actionbridge-pilot-runbook.md');
+  for (const token of ['Main Flow', 'Revoke / Kill-Switch', 'Verification Checklist', 'Pilot Exit Criteria', 'Do not integrate into Schwarzwald-Agent dashboard until ActionBridge standalone DoD is satisfied']) {
+    if (!runbook.includes(token)) fail(`pilot runbook missing ${token}`);
+  }
+  if (!process.exitCode) pass('ActionBridge pilot runbook documents standalone setup, verification, approval, execution, and exit gates');
+}
 
 const routeFiles = [
   'src/frontend/app/api/actionbridge/actions/route.ts',
@@ -476,7 +501,7 @@ if (exists('src/frontend/lib/actionbridge/persistence.ts')) {
 
 if (exists('src/frontend/app/api/actionbridge/execute/route.ts')) {
   const executeRouteState = read('src/frontend/app/api/actionbridge/execute/route.ts');
-  for (const token of ['approvalId', 'idempotencyKey', 'consumeApprovedActionBridgeExecution', 'persistActionBridgeExecutionResult', 'executionId', 'ACTIONBRIDGE_APPROVAL_NOT_EXECUTABLE', 'ACTIONBRIDGE_EXECUTION_RESULT_PERSIST_FAILED', 'dry_run_noop', 'networkExecution: false']) {
+  for (const token of ['approvalId', 'idempotencyKey', 'consumeApprovedActionBridgeExecution', 'persistActionBridgeExecutionResult', 'persistActionBridgeLeadSubmission', 'executionId', 'ACTIONBRIDGE_APPROVAL_NOT_EXECUTABLE', 'ACTIONBRIDGE_EXECUTION_RESULT_PERSIST_FAILED', 'dry_run_noop', 'networkExecution: false']) {
     if (!executeRouteState.includes(token)) fail(`execute route missing execution state/idempotency token ${token}`);
   }
   for (const token of ['createActionBridgeExecutionPlan', 'validateActionBridgeTarget', 'parseServerActionBridgeAllowlist', 'policy_check_succeeded_without_execution', 'decideActionBridgeNetworkExecutionControls', 'summarizeActionBridgeResponseLimitPolicy', 'actionBridgeAuditTaxonomy', "type: connectorForPlan.type || 'http'"]) {
@@ -517,7 +542,7 @@ if (migrationFiles.length) {
     'token_digest TEXT NOT NULL',
     'actionbridge_setup_links_owner_select',
     'actionbridge_capability_rules',
-    "name IN ('site.knowledge.read', 'lead.prepare_draft', 'appointment.request.prepare_draft')",
+    "name IN ('site.knowledge.read', 'lead.prepare_draft', 'lead.submit', 'appointment.request.prepare_draft')",
     "CHECK (risk_level = 'read' OR requires_approval = true)",
     "name = 'site.knowledge.read' OR risk_level = 'write'",
     'actionbridge_capability_rules_owner_select',

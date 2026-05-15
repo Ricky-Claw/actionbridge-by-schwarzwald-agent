@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createCoreServiceClient } from '@/lib/core/service-client';
 import { redactActionBridgeValue } from '@/lib/actionbridge/redaction';
 import { createActionBridgeSetupLinkDraft } from '@/lib/actionbridge/setup-links';
+import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -93,6 +94,15 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error || !data) return NextResponse.json({ error: 'ACTIONBRIDGE_SETUP_LINK_CREATE_FAILED' }, { status: 409 });
+
+  await persistActionBridgeControlAuditEvent(serviceSupabase, {
+    userId: user!.id,
+    connectorId,
+    eventName: 'setup_link.created',
+    input: { targetOrigin: draft.targetOrigin, connectorId },
+    status: 'succeeded',
+    resultSummary: { setupLinkId: data.id, status: data.status, expiresAt: data.expires_at },
+  });
 
   return NextResponse.json({
     setupLink: {

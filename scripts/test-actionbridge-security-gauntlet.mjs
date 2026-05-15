@@ -135,6 +135,12 @@ for (const [label, url, expectedOk] of [
   else fail(`setup profile URL guard failed: ${label}`, `expected ok=${expectedOk}, got ok=${Boolean(normalized)}`);
 }
 
+const redaction = read('src/frontend/lib/actionbridge/redaction.ts');
+for (const token of ['email', 'phone', 'contact', 'address', 'iban', 'vatId', 'EMAIL_PATTERN', 'PHONE_PATTERN', 'IBAN_PATTERN']) {
+  if (redaction.includes(token)) pass(`GDPR redaction marker: ${token}`);
+  else fail(`GDPR redaction missing marker: ${token}`);
+}
+
 const sourceFiles = [
   'src/frontend/lib/actionbridge/http-connector.ts',
   'src/frontend/lib/actionbridge/target-validation.ts',
@@ -158,6 +164,49 @@ if (!executeRoute.includes('body.allowlist') && executeRoute.includes('allowed_o
 else fail('caller allowlist trust', 'execute route may not be using connector-owned allowed_origins');
 if (executeRoute.includes('network_execution_enabled') && executeRoute.includes('networkExecution: false') && !executeRoute.includes('executeHttpActionConnector(')) pass('execution controls selected while network remains disabled');
 else fail('network execution control invariant', 'missing controls or network may be enabled');
+if (executeRoute.includes("consumed.execution.actionName === 'lead.submit'") && executeRoute.includes('persistActionBridgeLeadSubmission') && executeRoute.includes('ACTIONBRIDGE_LEAD_SUBMISSION_FAILED')) pass('approved lead.submit persists lead outbox action');
+else fail('lead submit execution gate', 'lead.submit must persist an approval-gated outbox record and fail closed on persist errors');
+if (executeRoute.includes("connectorId: typeof approvalSnapshot.connectorId === 'string'") && executeRoute.includes("status: 'failed'") && executeRoute.includes("errorCode: 'ACTIONBRIDGE_LEAD_SUBMISSION_FAILED'")) pass('lead.submit records connector id and failed execution state');
+else fail('lead submit failure/traceability gate', 'lead.submit must preserve connector id and mark failed executions on outbox persist failure');
+const leadSubmission = read('src/frontend/lib/actionbridge/lead-submission.ts');
+if (!leadSubmission.includes('fetch(') && !leadSubmission.includes('form.submit') && leadSubmission.includes('actionbridge_outbox')) pass('lead submission avoids arbitrary external form post');
+else fail('lead submission unsafe delivery', 'pilot lead action must not post arbitrary external forms');
+if (leadSubmission.includes('normalizeLeadSourceOrigin') && leadSubmission.includes('normalizeLeadSourcePath') && leadSubmission.includes('split(/[?#]/')) pass('lead submission strips source URL query/hash PII');
+else fail('lead source URL minimization', 'lead source origin/path must strip query/hash and reject unsafe URL forms');
+
+
+const readOnlyExecutor = read('src/frontend/lib/actionbridge/read-only-executor.ts');
+if (!readOnlyExecutor.includes('targetValidation.target') && readOnlyExecutor.includes('new URL(targetValidation.url)')) pass('read-only executor consumes validated target url');
+else fail('read-only executor target handling', 'executor must use validateActionBridgeTarget().url, not a missing target field');
+
+const bridgeHandshakeRoute = read('src/frontend/app/api/actionbridge/bridge/handshake/route.ts');
+if (bridgeHandshakeRoute.includes("!['pending', 'opened'].includes(setupLink.status)")) pass('bridge handshake only permits pending/opened setup links');
+else fail('bridge handshake status gate', 'completed/revoked/expired setup links must not reconnect');
+if (bridgeHandshakeRoute.includes('ACTIONBRIDGE_BRIDGE_INSTALLATION_REVOKED') && bridgeHandshakeRoute.includes("existingInstallation?.status === 'revoked'")) pass('bridge handshake does not revive revoked bridge installations');
+else fail('bridge installation revocation gate', 'revoked bridge installations could be upserted back to connected');
+if (bridgeHandshakeRoute.includes("update({ status: 'completed' })") && bridgeHandshakeRoute.includes("eventName: 'bridge.handshake.connected'")) pass('bridge handshake completes setup link and audits connection');
+else fail('bridge handshake completion/audit gate', 'successful bridge handshakes must close setup replay and audit connection');
+
+const setupLinksRoute = read('src/frontend/app/api/actionbridge/setup-links/route.ts');
+const setupSessionRoute = read('src/frontend/app/api/actionbridge/setup-session/route.ts');
+const verifyRoute = read('src/frontend/app/api/actionbridge/connectors/verify/route.ts');
+const capabilitiesRoute = read('src/frontend/app/api/actionbridge/capabilities/route.ts');
+for (const [label, source, marker] of [
+  ['setup link creation audit', setupLinksRoute, "eventName: 'setup_link.created'"],
+  ['verification challenge audit', verifyRoute, "eventName: 'domain_verification.challenge_issued'"],
+  ['verification result audit', verifyRoute, "domain_verification.verified"],
+  ['connector status audit', verifyRoute, "eventName: 'connector.permission_status.changed'"],
+  ['capability rule audit', capabilitiesRoute, "capability_rule.enabled"],
+]) {
+  if (source.includes('persistActionBridgeControlAuditEvent') && source.includes(marker)) pass(`control-plane audit marker: ${label}`);
+  else fail(`missing control-plane audit marker: ${label}`);
+}
+if (!verifyRoute.includes('human_attestation')) pass('pilot verification disables human attestation method');
+else fail('human attestation pilot gate', 'customer pilot verification must not expose human_attestation as an active method');
+
+const onboardingAuditMigration = read('supabase/migrations/20260515000100_actionbridge_onboarding_audit_triggers.sql');
+if (onboardingAuditMigration.includes('audit_actionbridge_setup_link_status_change') && onboardingAuditMigration.includes("'setup_link.' || NEW.status")) pass('setup link status changes are audited by DB trigger');
+else fail('setup link status audit trigger missing', 'opened/completed/revoked/expired setup transitions need immutable audit');
 
 const connectorsRoute = read('src/frontend/app/api/actionbridge/connectors/route.ts');
 for (const token of ['normalizeActionBridgeAllowedOrigins', "parsedUrl.pathname !== \'/\'", 'parsedUrl.search', 'parsedUrl.hash', 'isPrivateActionBridgeHost', 'network_execution_enabled: false']) {

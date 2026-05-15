@@ -10,8 +10,9 @@ import {
   verifyActionBridgeDomainChallenge,
   type ActionBridgeVerificationMethod,
 } from '@/lib/actionbridge/domain-verification';
+import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
 
-const METHODS = new Set<ActionBridgeVerificationMethod>(['human_attestation', 'well_known', 'meta_tag', 'dns_txt']);
+const METHODS = new Set<ActionBridgeVerificationMethod>(['well_known', 'meta_tag', 'dns_txt']);
 
 async function requireActionBridgeUser() {
   const supabase = await createClient();
@@ -71,6 +72,15 @@ export async function POST(request: NextRequest) {
 
   if (error || !data) return NextResponse.json({ error: 'ACTIONBRIDGE_VERIFICATION_CREATE_FAILED' }, { status: 409 });
 
+  await persistActionBridgeControlAuditEvent(serviceSupabase, {
+    userId: user!.id,
+    connectorId,
+    eventName: 'domain_verification.challenge_issued',
+    input: { connectorId, origin: challenge.origin, method },
+    status: 'succeeded',
+    resultSummary: { verificationId: data.id, method, status: data.status, expiresAt: data.expires_at },
+  });
+
   return NextResponse.json({
     verification: {
       id: data.id,
@@ -124,6 +134,15 @@ export async function PATCH(request: NextRequest) {
     .eq('user_id', user!.id)
     .eq('id', verificationId);
 
+  await persistActionBridgeControlAuditEvent(serviceSupabase, {
+    userId: user!.id,
+    connectorId: verification.connector_id,
+    eventName: result.ok ? 'domain_verification.verified' : 'domain_verification.failed',
+    input: { verificationId, origin: verification.origin, method: verification.method },
+    status: result.ok ? 'succeeded' : 'failed',
+    resultSummary: { verificationId, method: verification.method, resultStatus: result.status, evidence: redactActionBridgeValue(result.evidence) as Record<string, unknown> },
+  });
+
   if (result.ok) {
     const strongVerification = verification.method === 'well_known' || verification.method === 'meta_tag' || verification.method === 'dns_txt';
     await (serviceSupabase as any)
@@ -136,6 +155,14 @@ export async function PATCH(request: NextRequest) {
       })
       .eq('user_id', user!.id)
       .eq('id', verification.connector_id);
+    await persistActionBridgeControlAuditEvent(serviceSupabase, {
+      userId: user!.id,
+      connectorId: verification.connector_id,
+      eventName: 'connector.permission_status.changed',
+      input: { verificationId, method: verification.method },
+      status: 'succeeded',
+      resultSummary: { safetyStatus: strongVerification ? 'pass' : 'untested', permissionStatus: 'active', networkExecutionEnabled: false },
+    });
   }
 
   return NextResponse.json({ verification: { id: verificationId, status: result.status, networkExecution: result.networkExecution, evidence: redactActionBridgeValue(result.evidence) } }, { status: result.ok ? 200 : 409 });

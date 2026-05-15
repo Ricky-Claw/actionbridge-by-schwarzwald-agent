@@ -3,7 +3,7 @@ import 'server-only';
 import type { ActionBridgeInputField, ActionBridgeRiskLevel } from './types';
 import { sanitizeActionBridgeInputSchema, sanitizeActionBridgeSchemaText } from './schema-safety';
 
-export type ActionBridgeCapabilityName = 'site.knowledge.read' | 'lead.prepare_draft' | 'appointment.request.prepare_draft';
+export type ActionBridgeCapabilityName = 'site.knowledge.read' | 'lead.prepare_draft' | 'lead.submit' | 'appointment.request.prepare_draft';
 
 export interface ActionBridgeCapabilityRule {
   id: string;
@@ -48,6 +48,19 @@ export const ACTIONBRIDGE_CAPABILITY_DEFINITIONS: Record<ActionBridgeCapabilityN
       { name: 'contact', type: 'string', required: false, description: 'Optional customer-provided contact detail, redacted in logs.' },
     ],
     outputDescription: 'Approval-gated draft payload only. No CRM write and no form submission.',
+  },
+  'lead.submit': {
+    name: 'lead.submit',
+    description: 'Submit an approved lead into the ActionBridge lead outbox. Does not post to arbitrary third-party forms.',
+    riskLevel: 'write',
+    requiresApproval: true,
+    inputSchema: [
+      { name: 'name', type: 'string', required: true, description: 'Lead display name.' },
+      { name: 'contact', type: 'string', required: true, description: 'Customer-provided contact detail, redacted in logs.' },
+      { name: 'message', type: 'string', required: true, description: 'Lead request text.' },
+      { name: 'company', type: 'string', required: false, description: 'Optional company name.' },
+    ],
+    outputDescription: 'Approval-gated ActionBridge lead outbox record. No arbitrary external form submission.',
   },
   'appointment.request.prepare_draft': {
     name: 'appointment.request.prepare_draft',

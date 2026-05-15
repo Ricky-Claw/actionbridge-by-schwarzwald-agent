@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createCoreServiceClient } from '@/lib/core/service-client';
 import { parseActionBridgeBridgeHandshake } from '@/lib/actionbridge/bridge-handshake';
+import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
@@ -26,11 +27,21 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
   if (!setupLink) return NextResponse.json({ error: 'ACTIONBRIDGE_SETUP_LINK_NOT_FOUND' }, { status: 404 });
   if (setupLink.target_origin !== parsed.origin) return NextResponse.json({ error: 'ACTIONBRIDGE_BRIDGE_ORIGIN_MISMATCH' }, { status: 403 });
-  if (setupLink.status === 'revoked' || setupLink.status === 'expired' || new Date(setupLink.expires_at).getTime() < Date.now()) {
+  if (!['pending', 'opened'].includes(setupLink.status) || new Date(setupLink.expires_at).getTime() < Date.now()) {
     return NextResponse.json({ error: 'ACTIONBRIDGE_SETUP_LINK_EXPIRED_OR_REVOKED' }, { status: 409 });
   }
 
   const now = new Date().toISOString();
+  const { data: existingInstallation } = await (serviceSupabase as any)
+    .from('actionbridge_bridge_installations')
+    .select('id,status')
+    .eq('setup_link_id', setupLink.id)
+    .eq('target_origin', parsed.origin)
+    .maybeSingle();
+  if (existingInstallation?.status === 'revoked') {
+    return NextResponse.json({ error: 'ACTIONBRIDGE_BRIDGE_INSTALLATION_REVOKED' }, { status: 409 });
+  }
+
   const { data, error } = await (serviceSupabase as any)
     .from('actionbridge_bridge_installations')
     .upsert({
@@ -48,9 +59,18 @@ export async function POST(request: NextRequest) {
 
   await (serviceSupabase as any)
     .from('actionbridge_setup_links')
-    .update({ status: 'opened' })
+    .update({ status: 'completed' })
     .eq('id', setupLink.id)
     .in('status', ['pending', 'opened']);
+
+  await persistActionBridgeControlAuditEvent(serviceSupabase, {
+    userId: setupLink.user_id,
+    connectorId: setupLink.connector_id || null,
+    eventName: 'bridge.handshake.connected',
+    input: { setupLinkId: setupLink.id, targetOrigin: parsed.origin, bridgeVersion: parsed.bridgeVersion },
+    status: 'succeeded',
+    resultSummary: { bridgeInstallationId: data.id, setupLinkStatus: 'completed', mode: 'connected_only' },
+  });
 
   return NextResponse.json({
     bridge: {

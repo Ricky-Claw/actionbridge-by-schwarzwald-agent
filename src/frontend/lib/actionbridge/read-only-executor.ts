@@ -51,13 +51,15 @@ export async function executeActionBridgeReadOnlyGet(
   }
 
   const targetValidation = validateActionBridgeTarget({ connector: { baseUrl: request.connector.baseUrl }, path: request.path, allowlist: request.allowlist });
-  if (!targetValidation.ok || !targetValidation.target) {
+  if (!targetValidation.ok || !targetValidation.url) {
     return { ok: false, status: 403, networkExecution: false, redactedInput, resultSummary: { status: 'read_only_blocked', reason: targetValidation.reason, networkExecution: false } };
   }
 
-  const addresses = await dns.lookup(targetValidation.target.hostname, { all: true, verbatim: true });
+  const target = new URL(targetValidation.url);
+
+  const addresses = await dns.lookup(target.hostname, { all: true, verbatim: true });
   const dnsDecision = decideActionBridgeDnsPinning({
-    hostname: targetValidation.target.hostname,
+    hostname: target.hostname,
     addresses: addresses.map((entry) => ({ address: entry.address, family: entry.family === 6 ? 6 : 4 })),
     networkExecution: false,
   });
@@ -65,7 +67,7 @@ export async function executeActionBridgeReadOnlyGet(
     return { ok: false, status: 403, networkExecution: false, redactedInput, resultSummary: { status: 'read_only_blocked', reason: dnsDecision.reason, dns: dnsDecision, networkExecution: false } };
   }
 
-  const response = await fetch(targetValidation.target, {
+  const response = await fetch(target, {
     method: 'GET',
     redirect: 'manual',
     signal: AbortSignal.timeout(5000),

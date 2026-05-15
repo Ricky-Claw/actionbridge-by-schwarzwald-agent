@@ -14,6 +14,7 @@ import { decideActionBridgeNetworkExecutionControls, normalizeActionBridgeExecut
 import { actionBridgeAuditTaxonomy } from '@/lib/actionbridge/audit-taxonomy';
 import { summarizeActionBridgeResponseLimitPolicy } from '@/lib/actionbridge/response-limits';
 import { executeActionBridgeReadOnlyGet } from '@/lib/actionbridge/read-only-executor';
+import { persistActionBridgeLeadSubmission } from '@/lib/actionbridge/lead-submission';
 
 async function requireActionBridgeUser() {
   const supabase = await createClient();
@@ -82,13 +83,48 @@ export async function POST(request: NextRequest) {
     }
 
     const executionId = consumed.execution.executionId;
-    const safeResult = consumed.execution.safeResult || {
+    const approvalSnapshot = consumed.execution.safeResult?.approvalSnapshot && typeof consumed.execution.safeResult.approvalSnapshot === 'object'
+      ? consumed.execution.safeResult.approvalSnapshot as Record<string, unknown>
+      : {};
+    let safeResult = consumed.execution.safeResult || {
       status: 'dry_run_noop',
       mode: 'policy_check_succeeded_without_execution',
       actionName: consumed.execution.actionName,
       riskLevel: consumed.execution.riskLevel,
       networkExecution: false,
     };
+
+    if (!consumed.execution.reused && consumed.execution.executionStatus === 'executing' && consumed.execution.actionName === 'lead.submit') {
+      const leadSubmission = await persistActionBridgeLeadSubmission(serviceSupabase, {
+        userId: user!.id,
+        connectorId: typeof approvalSnapshot.connectorId === 'string' ? approvalSnapshot.connectorId : null,
+        actionId: consumed.execution.actionId,
+        approvalId: consumed.execution.approvalId,
+        executionId,
+        leadInput: approvalSnapshot.redactedInput || {},
+      });
+      if (leadSubmission.error || !leadSubmission.safeResult) {
+        await persistActionBridgeExecutionResult(serviceSupabase, {
+          userId: user!.id,
+          executionId,
+          approvalId: consumed.execution.approvalId,
+          status: 'failed',
+          safeResult: {
+            status: 'lead_submission_failed',
+            reason: 'ActionBridge lead submission could not be persisted.',
+            networkExecution: false,
+          },
+          errorCode: 'ACTIONBRIDGE_LEAD_SUBMISSION_FAILED',
+        });
+        return NextResponse.json({
+          error: 'ACTIONBRIDGE_LEAD_SUBMISSION_FAILED',
+          decision: 'deny',
+          executionId,
+          networkExecution: false,
+        }, { status: 503 });
+      }
+      safeResult = leadSubmission.safeResult;
+    }
 
     if (!consumed.execution.reused && consumed.execution.executionStatus === 'executing') {
       const persistedResult = await persistActionBridgeExecutionResult(serviceSupabase, {
@@ -112,7 +148,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       decision: 'allow',
       status: 'policy_check_succeeded_without_execution',
-      operatorMessage: 'Approval consumed as a dry-run policy check. No network execution occurred.',
+      operatorMessage: consumed.execution.actionName === 'lead.submit'
+        ? 'Approved lead submitted to the ActionBridge lead outbox. No arbitrary external form post occurred.'
+        : 'Approval consumed as a dry-run policy check. No network execution occurred.',
       networkExecution: false,
       approvalId: consumed.execution.approvalId,
       executionId,

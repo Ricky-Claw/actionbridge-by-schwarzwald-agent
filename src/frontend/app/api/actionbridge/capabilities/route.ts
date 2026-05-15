@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createCoreServiceClient } from '@/lib/core/service-client';
 import { normalizeActionBridgeCapabilityRuleInput } from '@/lib/actionbridge/capability-rules';
 import { redactActionBridgeValue } from '@/lib/actionbridge/redaction';
+import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
 
 async function requireActionBridgeUser() {
   const supabase = await createClient();
@@ -89,5 +90,13 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (error || !data) return NextResponse.json({ error: 'ACTIONBRIDGE_CAPABILITY_RULE_SAVE_FAILED' }, { status: 409 });
+  await persistActionBridgeControlAuditEvent(serviceSupabase, {
+    userId: user!.id,
+    connectorId: rule.connectorId,
+    eventName: rule.enabled ? 'capability_rule.enabled' : 'capability_rule.disabled',
+    input: { connectorId: rule.connectorId, name: rule.name, enabled: rule.enabled, config: rule.config },
+    status: 'succeeded',
+    resultSummary: { capabilityRuleId: data.id, name: data.name, riskLevel: data.risk_level, enabled: data.enabled, requiresApproval: data.requires_approval },
+  });
   return NextResponse.json({ capabilityRule: safeCapabilityRule(data) }, { status: 201 });
 }

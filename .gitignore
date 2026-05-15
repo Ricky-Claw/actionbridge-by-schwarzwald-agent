@@ -10,3 +10,4 @@ coverage/
 auth-profiles.json
 models.json
 secrets/
+.learnings/

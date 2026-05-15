@@ -3,6 +3,8 @@ import 'server-only';
 import crypto from 'node:crypto';
 import { redactActionBridgeValue } from './redaction';
 
+export type ActionBridgeWebhookSigningMode = 'unsigned_pilot' | 'hmac_sha256';
+
 export interface ActionBridgeWebhookSigningResolution {
   ok: boolean;
   signingSecret: string | null;
@@ -23,15 +25,29 @@ function normalizeSecretRef(secretRef: unknown): string | null {
 
 export function resolveActionBridgeWebhookSigningSecret(input: {
   connectorId: string;
+  signingMode?: ActionBridgeWebhookSigningMode | null;
   secretRef?: string | null;
   env?: NodeJS.ProcessEnv;
 }): ActionBridgeWebhookSigningResolution {
+  const signingMode = input.signingMode === 'hmac_sha256' ? 'hmac_sha256' : 'unsigned_pilot';
   const secretRef = normalizeSecretRef(input.secretRef);
-  if (!secretRef) {
+  if (signingMode === 'unsigned_pilot') {
     return {
       ok: true,
       signingSecret: null,
-      resultSummary: { signing: 'unsigned_pilot_mode', reason: 'No server-owned webhook signing secret reference is configured.' },
+      resultSummary: { signing: 'unsigned_pilot_mode', reason: 'Connector is explicitly configured for controlled unsigned pilot delivery.' },
+    };
+  }
+
+  if (!secretRef) {
+    return {
+      ok: false,
+      signingSecret: null,
+      resultSummary: redactActionBridgeValue({
+        signing: 'secret_ref_missing',
+        reason: 'Connector requires HMAC signing but has no valid server-owned secret reference.',
+        connectorId: input.connectorId,
+      }) as Record<string, unknown>,
     };
   }
 

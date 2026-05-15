@@ -185,7 +185,7 @@ else fail('webhook endpoint path guard', 'endpoint path must be relative-only an
 
 const webhookDelivery = read('src/frontend/lib/actionbridge/webhook-delivery.ts');
 const webhookSigning = read('src/frontend/lib/actionbridge/webhook-signing.ts');
-for (const token of ['resolveActionBridgeWebhookSigningSecret', 'ACTIONBRIDGE_WEBHOOK_SIGNING_SECRET_', 'secret_ref_unresolved', 'unsigned_pilot_mode', 'secretRefDigest']) {
+for (const token of ['resolveActionBridgeWebhookSigningSecret', 'ACTIONBRIDGE_WEBHOOK_SIGNING_SECRET_', 'secret_ref_missing', 'secret_ref_unresolved', 'unsigned_pilot_mode', 'secretRefDigest']) {
   if (webhookSigning.includes(token)) pass(`webhook signing marker: ${token}`);
   else fail(`webhook signing missing marker: ${token}`);
 }
@@ -200,7 +200,7 @@ if (executeRoute.includes('deliverActionBridgeWebhook') && executeRoute.includes
 else fail('execute route webhook gate', 'webhook delivery must be gated by connector type and network execution controls');
 if (executeRoute.includes('endpoint_path') && executeRoute.includes("path: typeof webhookConnector.endpoint_path === 'string' ? webhookConnector.endpoint_path : '/'")) pass('execute route uses server-owned webhook endpoint path');
 else fail('execute route webhook gate', 'webhook delivery must be gated by connector type and network execution controls');
-for (const token of ['webhook_signing_secret_unresolved', 'resolveActionBridgeWebhookSigningSecret', 'signingSecret: signingResolution.signingSecret', 'webhook_delivery_error', 'ACTIONBRIDGE_WEBHOOK_DELIVERY_FAILED', 'decideActionBridgeWebhookDeliveryThrottle', 'webhook_rate_limited', 'recordActionBridgeWebhookFailureQuarantine', 'quarantine_required', "if (!webhookResult.ok)", "status: finalExecutionStatus", "finalExecutionStatus === 'failed' ? 502 : 200"]) {
+for (const token of ['webhook_signing_secret_unresolved', 'webhook_signing_mode', 'resolveActionBridgeWebhookSigningSecret', 'signingSecret: signingResolution.signingSecret', 'webhook_delivery_error', 'ACTIONBRIDGE_WEBHOOK_DELIVERY_FAILED', 'decideActionBridgeWebhookDeliveryThrottle', 'webhook_rate_limited', 'recordActionBridgeWebhookFailureQuarantine', 'quarantine_required', "if (!webhookResult.ok)", "status: finalExecutionStatus", "finalExecutionStatus === 'failed' ? 502 : 200"]) {
   if (executeRoute.includes(token)) pass(`execute route webhook failure marker: ${token}`);
   else fail(`execute route webhook failure missing marker: ${token}`);
 }
@@ -329,4 +329,11 @@ const pilotSmoke = read('docs/pilot-smoke-test-runbook.md');
 for (const token of ['Stop Criteria', 'private/internal host', 'raw secret/token/idempotency key', 'failed webhook delivery is recorded as success', 'revoked/closed setup link']) {
   if (pilotSmoke.includes(token)) pass(`pilot smoke security marker: ${token}`);
   else fail(`pilot smoke runbook missing marker: ${token}`);
+}
+
+
+const webhookSigningModeMigration = read('supabase/migrations/20260515234500_actionbridge_webhook_signing_mode.sql');
+for (const token of ['webhook_signing_mode', 'unsigned_pilot', 'hmac_sha256', 'secret_ref IS NOT NULL']) {
+  if (webhookSigningModeMigration.includes(token)) pass(`webhook signing mode migration marker: ${token}`);
+  else fail(`webhook signing mode migration missing marker: ${token}`);
 }

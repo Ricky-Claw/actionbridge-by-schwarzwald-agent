@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
       if (connectorId) {
         const { data: webhookConnector } = await (serviceSupabase as any)
           .from('actionbridge_connectors')
-          .select('id,type,base_url,enabled,allowed_origins,network_execution_enabled,safety_status,permission_status,endpoint_path,secret_ref')
+          .select('id,type,base_url,enabled,allowed_origins,network_execution_enabled,safety_status,permission_status,endpoint_path,webhook_signing_mode,secret_ref')
           .eq('user_id', user!.id)
           .eq('id', connectorId)
           .maybeSingle();
@@ -160,6 +160,7 @@ export async function POST(request: NextRequest) {
           })();
           const signingResolution = resolveActionBridgeWebhookSigningSecret({
             connectorId: webhookConnector.id,
+            signingMode: webhookConnector.webhook_signing_mode === 'hmac_sha256' ? 'hmac_sha256' : 'unsigned_pilot',
             secretRef: webhookConnector.secret_ref,
           });
           const webhookThrottle = decideActionBridgeWebhookDeliveryThrottle({

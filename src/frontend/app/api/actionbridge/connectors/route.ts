@@ -106,6 +106,7 @@ function parseActionBridgeConnectorDraft(body: Record<string, unknown>) {
     safety_status: 'untested',
     permission_status: 'draft',
     endpoint_path: endpointPath,
+    webhook_signing_mode: 'unsigned_pilot',
   };
 }
 
@@ -115,7 +116,7 @@ export async function GET() {
 
   const { data, error } = await (supabase as any)
     .from('actionbridge_connectors')
-    .select('id, user_id, name, type, base_url, auth_mode, enabled, allowed_origins, capabilities, network_execution_enabled, safety_status, permission_status, endpoint_path, created_at, updated_at')
+    .select('id, user_id, name, type, base_url, auth_mode, enabled, allowed_origins, capabilities, network_execution_enabled, safety_status, permission_status, endpoint_path, webhook_signing_mode, created_at, updated_at')
     .eq('user_id', user!.id)
     .order('created_at', { ascending: false })
     .limit(100);
@@ -139,6 +140,7 @@ export async function GET() {
       safetyStatus: connector.safety_status,
       permissionStatus: connector.permission_status,
       endpointPath: connector.endpoint_path || '/',
+      webhookSigningMode: connector.webhook_signing_mode || 'unsigned_pilot',
       createdAt: connector.created_at,
       updatedAt: connector.updated_at,
     })),
@@ -176,7 +178,7 @@ export async function POST(request: NextRequest) {
       user_id: user!.id,
       ...draft,
     })
-    .select('id, user_id, name, type, base_url, auth_mode, enabled, allowed_origins, capabilities, network_execution_enabled, safety_status, permission_status, endpoint_path, created_at, updated_at')
+    .select('id, user_id, name, type, base_url, auth_mode, enabled, allowed_origins, capabilities, network_execution_enabled, safety_status, permission_status, endpoint_path, webhook_signing_mode, created_at, updated_at')
     .single();
 
   if (error || !data) {
@@ -198,6 +200,7 @@ export async function POST(request: NextRequest) {
       safetyStatus: data.safety_status,
       permissionStatus: data.permission_status,
       endpointPath: data.endpoint_path || '/',
+      webhookSigningMode: data.webhook_signing_mode || 'unsigned_pilot',
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     },

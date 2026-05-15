@@ -169,7 +169,7 @@ if (!process.exitCode) {
   }
   if (webhookDelivery.includes('form.submit') || webhookDelivery.includes('StealthyFetcher')) fail('webhook delivery must not use browser/RPA/form submit');
   const webhookSigning = read('src/frontend/lib/actionbridge/webhook-signing.ts');
-  for (const token of ['resolveActionBridgeWebhookSigningSecret', 'ACTIONBRIDGE_WEBHOOK_SIGNING_SECRET_', 'actionbridge:webhook-signing:', 'secretRefDigest', 'secret_ref_unresolved', 'unsigned_pilot_mode']) {
+  for (const token of ['resolveActionBridgeWebhookSigningSecret', 'ActionBridgeWebhookSigningMode', 'ACTIONBRIDGE_WEBHOOK_SIGNING_SECRET_', 'actionbridge:webhook-signing:', 'secretRefDigest', 'secret_ref_missing', 'secret_ref_unresolved', 'unsigned_pilot_mode']) {
     if (!webhookSigning.includes(token)) fail(`webhook-signing.ts missing ${token}`);
   }
   if (webhookSigning.includes('console.log') || webhookSigning.includes('secretValue')) fail('webhook signing resolver must not log or expose raw secret values');
@@ -355,6 +355,7 @@ if (!process.exitCode) {
   if (!connectorsRoute.includes(".eq('user_id', user!.id)")) fail('connectors route must scope reads to authenticated owner');
   if (!connectorsRoute.includes('createCoreServiceClient')) fail('connectors route must use server-only service client for connector creation/update');
   if (!connectorsRoute.includes('ACTIONBRIDGE_CONNECTOR_CREATE_FAILED')) fail('connectors route must fail closed on connector creation errors');
+  if (!connectorsRoute.includes('webhook_signing_mode') || !connectorsRoute.includes('webhookSigningMode')) fail('connectors route must expose explicit webhook signing mode without secrets');
   if (!connectorsRoute.includes("new Set(['http', 'website', 'webhook'])")) fail('connectors route must allow website and webhook connector types');
   if (!connectorsRoute.includes('public_page_extract') || !connectorsRoute.includes('no_form_submit')) fail('website connectors must persist public extraction guardrail capabilities');
   if (!connectorsRoute.includes('parsedUrl.username') || !connectorsRoute.includes('parsedUrl.password')) fail('connectors route must reject URL userinfo secrets');
@@ -712,4 +713,31 @@ for (const [file, tokens, label] of [
     for (const token of tokens) if (!source.includes(token)) fail(`${file} missing ${token}`);
     if (!process.exitCode) pass(label);
   }
+}
+
+
+if (exists('supabase/migrations/20260515234500_actionbridge_webhook_signing_mode.sql')) {
+  const signingModeMigration = read('supabase/migrations/20260515234500_actionbridge_webhook_signing_mode.sql');
+  for (const token of ['webhook_signing_mode', 'unsigned_pilot', 'hmac_sha256', 'actionbridge_connectors_webhook_signing_ref_required', 'secret_ref IS NOT NULL']) {
+    if (!signingModeMigration.includes(token)) fail(`webhook signing mode migration missing ${token}`);
+  }
+  if (!process.exitCode) pass('ActionBridge webhook signing mode migration makes unsigned/HMAC explicit');
+}
+
+
+if (exists('README.md')) {
+  const readme = read('README.md');
+  for (const token of ['Current pilot capabilities', 'controlled-pilot capable', 'not production/broad-rollout ready', 'Webhook-v1 delivery', 'Error log/failure monitor', 'production blockers']) {
+    if (!readme.includes(token)) fail(`README missing ${token}`);
+  }
+  if (!process.exitCode) pass('README documents controlled-pilot capability and production blockers');
+}
+
+
+if (exists('docs/actionbridge-work-batch-2026-05-15-signing-readiness.md')) {
+  const batch = read('docs/actionbridge-work-batch-2026-05-15-signing-readiness.md');
+  for (const token of ['Tasks Covered', 'Webhook-v1 HMAC secret-ref resolver', 'Explicit `webhook_signing_mode` migration', 'Production readiness checklist', 'Boundaries Preserved']) {
+    if (!batch.includes(token)) fail(`work batch doc missing ${token}`);
+  }
+  if (!process.exitCode) pass('Work batch document records autonomous hardening tasks');
 }

@@ -33,7 +33,8 @@ Required server-owned fields:
 - `type = webhook`
 - `target_origin` / exact HTTPS origin allowlist
 - `endpoint_path` without absolute URL override
-- `auth_ref` or secret reference, never raw secret in UI/tool catalog
+- explicit `webhook_signing_mode` (`unsigned_pilot` or `hmac_sha256`)
+- `auth_ref` or secret reference for `hmac_sha256`, never raw secret in UI/tool catalog
 - `enabled`
 - `safety_status`
 - `permission_status`

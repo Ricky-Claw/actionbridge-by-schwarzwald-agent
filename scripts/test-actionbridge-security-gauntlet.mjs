@@ -184,6 +184,12 @@ if (webhookConnectorsRoute.includes("startsWith('//')") && webhookConnectorsRout
 else fail('webhook endpoint path guard', 'endpoint path must be relative-only and reject query/hash before persistence');
 
 const webhookDelivery = read('src/frontend/lib/actionbridge/webhook-delivery.ts');
+const webhookSigning = read('src/frontend/lib/actionbridge/webhook-signing.ts');
+for (const token of ['resolveActionBridgeWebhookSigningSecret', 'ACTIONBRIDGE_WEBHOOK_SIGNING_SECRET_', 'secret_ref_unresolved', 'unsigned_pilot_mode', 'secretRefDigest']) {
+  if (webhookSigning.includes(token)) pass(`webhook signing marker: ${token}`);
+  else fail(`webhook signing missing marker: ${token}`);
+}
+if (webhookSigning.includes('console.log') || webhookSigning.includes('secretValue')) fail('webhook signing resolver must not log or expose raw secrets');
 for (const token of ['deliverActionBridgeWebhook', 'postPinnedHttpsJson', 'pinnedAddress', 'servername: input.target.hostname', 'Host: input.target.host', 'decideActionBridgeDnsPinning', 'validateActionBridgeTarget', 'X-ActionBridge-Idempotency-Digest', 'X-ActionBridge-Signature']) {
   if (webhookDelivery.includes(token)) pass(`webhook delivery marker: ${token}`);
   else fail(`webhook delivery missing marker: ${token}`);
@@ -194,7 +200,7 @@ if (executeRoute.includes('deliverActionBridgeWebhook') && executeRoute.includes
 else fail('execute route webhook gate', 'webhook delivery must be gated by connector type and network execution controls');
 if (executeRoute.includes('endpoint_path') && executeRoute.includes("path: typeof webhookConnector.endpoint_path === 'string' ? webhookConnector.endpoint_path : '/'")) pass('execute route uses server-owned webhook endpoint path');
 else fail('execute route webhook gate', 'webhook delivery must be gated by connector type and network execution controls');
-for (const token of ['webhook_delivery_error', 'ACTIONBRIDGE_WEBHOOK_DELIVERY_FAILED', 'decideActionBridgeWebhookDeliveryThrottle', 'webhook_rate_limited', 'recordActionBridgeWebhookFailureQuarantine', 'quarantine_required', "if (!webhookResult.ok)", "status: finalExecutionStatus", "finalExecutionStatus === 'failed' ? 502 : 200"]) {
+for (const token of ['webhook_signing_secret_unresolved', 'resolveActionBridgeWebhookSigningSecret', 'signingSecret: signingResolution.signingSecret', 'webhook_delivery_error', 'ACTIONBRIDGE_WEBHOOK_DELIVERY_FAILED', 'decideActionBridgeWebhookDeliveryThrottle', 'webhook_rate_limited', 'recordActionBridgeWebhookFailureQuarantine', 'quarantine_required', "if (!webhookResult.ok)", "status: finalExecutionStatus", "finalExecutionStatus === 'failed' ? 502 : 200"]) {
   if (executeRoute.includes(token)) pass(`execute route webhook failure marker: ${token}`);
   else fail(`execute route webhook failure missing marker: ${token}`);
 }
@@ -295,3 +301,32 @@ if (connectorsRoute.includes("candidate.includes('?')") && connectorsRoute.inclu
 else fail('webhook endpoint path strict rejection missing', 'endpointPath must reject query/hash/backslash inputs fail-closed');
 if (errorsRoute.includes(".eq('status', currentStatus)") && errorsRoute.includes('ACTIONBRIDGE_ERROR_STATUS_UPDATE_FAILED')) pass('error status lifecycle update is compare-and-set guarded');
 else fail('error status lifecycle atomic guard missing', 'PATCH must update with current status predicate to prevent racing downgrades');
+
+
+const productionReadiness = read('docs/production-readiness-checklist.md');
+for (const token of ['HMAC secret-ref wiring', 'Distributed atomic rate limiter', 'Trusted proxy/header enforcement', 'Retention/GDPR policy', 'No production/broad rollout']) {
+  if (productionReadiness.includes(token)) pass(`production readiness security doc marker: ${token}`);
+  else fail(`production readiness doc missing marker: ${token}`);
+}
+const receiverGuide = read('docs/webhook-signature-receiver-guide.md');
+for (const token of ['X-ActionBridge-Signature', 'constant-time comparison', 'timestamp', 'idempotency', 'Never send the shared secret']) {
+  if (receiverGuide.includes(token)) pass(`webhook receiver guide security marker: ${token}`);
+  else fail(`webhook receiver guide missing marker: ${token}`);
+}
+const retentionPolicy = read('docs/error-log-retention-policy.md');
+for (const token of ['must not store', 'raw setup tokens', 'raw idempotency keys', 'connector secrets', 'unredacted personal data']) {
+  if (retentionPolicy.includes(token)) pass(`error retention security marker: ${token}`);
+  else fail(`error retention policy missing marker: ${token}`);
+}
+
+
+const sentinelBlockers = read('docs/sentinel-production-blockers.md');
+for (const token of ['Distributed Rate Limiting', 'Durable Quarantine', 'Behavioral Security Tests', 'Secret Management / Rotation', 'Operational Retention']) {
+  if (sentinelBlockers.includes(token)) pass(`sentinel blocker doc marker: ${token}`);
+  else fail(`sentinel blocker doc missing marker: ${token}`);
+}
+const pilotSmoke = read('docs/pilot-smoke-test-runbook.md');
+for (const token of ['Stop Criteria', 'private/internal host', 'raw secret/token/idempotency key', 'failed webhook delivery is recorded as success', 'revoked/closed setup link']) {
+  if (pilotSmoke.includes(token)) pass(`pilot smoke security marker: ${token}`);
+  else fail(`pilot smoke runbook missing marker: ${token}`);
+}

@@ -111,7 +111,8 @@ Every attempt records:
 - Exact origin allowlist.
 - Endpoint path cannot be absolute URL or scheme-relative.
 - Secret from secret store only; never stored raw in DB or logs.
-- HMAC signature recommended: `X-ActionBridge-Signature` over timestamp + body.
+- HMAC signature: if a server-owned `secret_ref` exists, ActionBridge resolves it server-side and sends `X-ActionBridge-Signature` over timestamp + body; unresolved refs fail closed before network execution.
+- Unsigned mode is allowed only for controlled pilot connectors with explicit compensating controls.
 - Timestamp header: `X-ActionBridge-Timestamp`.
 - Idempotency header: `X-ActionBridge-Idempotency-Digest`.
 - Rate limit per connector/action.

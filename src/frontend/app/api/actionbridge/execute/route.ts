@@ -16,6 +16,7 @@ import { summarizeActionBridgeResponseLimitPolicy } from '@/lib/actionbridge/res
 import { executeActionBridgeReadOnlyGet } from '@/lib/actionbridge/read-only-executor';
 import { persistActionBridgeLeadSubmission } from '@/lib/actionbridge/lead-submission';
 import { deliverActionBridgeWebhook } from '@/lib/actionbridge/webhook-delivery';
+import { resolveActionBridgeWebhookSigningSecret } from '@/lib/actionbridge/webhook-signing';
 import { decideActionBridgeWebhookDeliveryThrottle, recordActionBridgeWebhookFailureQuarantine } from '@/lib/actionbridge/rate-limit';
 import { persistActionBridgeErrorEvent } from '@/lib/actionbridge/error-log';
 
@@ -142,7 +143,7 @@ export async function POST(request: NextRequest) {
       if (connectorId) {
         const { data: webhookConnector } = await (serviceSupabase as any)
           .from('actionbridge_connectors')
-          .select('id,type,base_url,enabled,allowed_origins,network_execution_enabled,safety_status,permission_status,endpoint_path')
+          .select('id,type,base_url,enabled,allowed_origins,network_execution_enabled,safety_status,permission_status,endpoint_path,secret_ref')
           .eq('user_id', user!.id)
           .eq('id', connectorId)
           .maybeSingle();
@@ -157,6 +158,10 @@ export async function POST(request: NextRequest) {
           const webhookDestinationOrigin = (() => {
             try { return new URL(webhookConnector.base_url).origin; } catch { return 'invalid-origin'; }
           })();
+          const signingResolution = resolveActionBridgeWebhookSigningSecret({
+            connectorId: webhookConnector.id,
+            secretRef: webhookConnector.secret_ref,
+          });
           const webhookThrottle = decideActionBridgeWebhookDeliveryThrottle({
             request,
             tenantId: user!.id,
@@ -165,7 +170,19 @@ export async function POST(request: NextRequest) {
             destinationOrigin: webhookDestinationOrigin,
           });
           try {
-            if (!webhookThrottle.ok) {
+            if (!signingResolution.ok) {
+              webhookResult = {
+                ok: false,
+                status: 503,
+                networkExecution: false,
+                resultSummary: {
+                  status: 'webhook_signing_secret_unresolved',
+                  reason: 'Webhook signing secret reference is configured but unavailable server-side.',
+                  signing: signingResolution.resultSummary,
+                  networkExecution: false,
+                },
+              };
+            } else if (!webhookThrottle.ok) {
               webhookResult = {
                 ok: false,
                 status: 429,
@@ -187,7 +204,12 @@ export async function POST(request: NextRequest) {
                 payload: { leadSubmission: leadSubmission.safeResult },
                 path: typeof webhookConnector.endpoint_path === 'string' ? webhookConnector.endpoint_path : '/',
                 allowlist: parseServerActionBridgeAllowlist(webhookConnector.allowed_origins),
+                signingSecret: signingResolution.signingSecret,
               });
+              webhookResult.resultSummary = {
+                ...webhookResult.resultSummary,
+                signing: signingResolution.resultSummary,
+              };
             }
           } catch (error) {
             webhookResult = {

@@ -28,6 +28,7 @@ const requiredFiles = [
   'src/frontend/lib/actionbridge/read-only-executor.ts',
   'src/frontend/lib/actionbridge/lead-submission.ts',
   'src/frontend/lib/actionbridge/webhook-delivery.ts',
+  'src/frontend/lib/actionbridge/webhook-signing.ts',
   'src/frontend/lib/actionbridge/domain-verification.ts',
   'src/frontend/lib/actionbridge/setup-links.ts',
   'src/frontend/lib/actionbridge/setup-session.ts',
@@ -167,7 +168,12 @@ if (!process.exitCode) {
     if (!webhookDelivery.includes(token)) fail(`webhook-delivery.ts missing ${token}`);
   }
   if (webhookDelivery.includes('form.submit') || webhookDelivery.includes('StealthyFetcher')) fail('webhook delivery must not use browser/RPA/form submit');
-  if (!process.exitCode) pass('ActionBridge Webhook-v1 delivery enforces allowlist, DNS/IP pinned connect, no redirects, timeout, idempotency, and redaction');
+  const webhookSigning = read('src/frontend/lib/actionbridge/webhook-signing.ts');
+  for (const token of ['resolveActionBridgeWebhookSigningSecret', 'ACTIONBRIDGE_WEBHOOK_SIGNING_SECRET_', 'actionbridge:webhook-signing:', 'secretRefDigest', 'secret_ref_unresolved', 'unsigned_pilot_mode']) {
+    if (!webhookSigning.includes(token)) fail(`webhook-signing.ts missing ${token}`);
+  }
+  if (webhookSigning.includes('console.log') || webhookSigning.includes('secretValue')) fail('webhook signing resolver must not log or expose raw secret values');
+  if (!process.exitCode) pass('ActionBridge Webhook-v1 delivery enforces allowlist, DNS/IP pinned connect, no redirects, timeout, idempotency, signing refs, and redaction');
 
   const capabilityRules = read('src/frontend/lib/actionbridge/capability-rules.ts');
   for (const token of ['ACTIONBRIDGE_CAPABILITY_DEFINITIONS', 'site.knowledge.read', 'lead.prepare_draft', 'lead.submit', 'appointment.request.prepare_draft', 'requiresApproval: true', 'riskLevel: \'write\'', 'sanitizeActionBridgeInputSchema', 'compileActionBridgeCapabilityTool']) {
@@ -678,4 +684,32 @@ if (exists('src/frontend/app/api/actionbridge/errors/route.ts')) {
   const errorsRouteForLifecycle = read('src/frontend/app/api/actionbridge/errors/route.ts');
   if (!errorsRouteForLifecycle.includes(".eq('status', currentStatus)")) fail('error status lifecycle update must be compare-and-set guarded');
   if (!process.exitCode) pass('ActionBridge error status lifecycle update is compare-and-set guarded');
+}
+
+
+for (const [file, tokens, label] of [
+  ['docs/production-readiness-checklist.md', ['Production Readiness Checklist', 'Connector Execution Safety', 'Secrets and Signing', 'Abuse Controls', 'Observability and Operations', 'Verification Tooling', 'No production/broad rollout'], 'Production readiness checklist tracks remaining gates'],
+  ['docs/error-log-retention-policy.md', ['Retention / GDPR', 'Data Minimization', 'resolved high/critical', 'user/account deletion', 'redacted incident packet'], 'Error log retention policy documents GDPR/minimization rules'],
+  ['docs/webhook-signature-receiver-guide.md', ['X-ActionBridge-Signature', 'HMAC-SHA256', 'timingSafeEqual', 'Idempotency', 'Receiver Rejection Rules'], 'Webhook signature receiver guide documents verification'],
+  ['docs/behavioral-test-roadmap.md', ['Webhook Endpoint Path', 'Webhook Delivery Failure Semantics', 'Error Lifecycle Race', 'Rate Limits / Quarantine', 'Visibility Sanitization'], 'Behavioral test roadmap defines production behavioral cases'],
+]) {
+  if (!exists(file)) fail(`Missing ${file}`);
+  else {
+    const source = read(file);
+    for (const token of tokens) if (!source.includes(token)) fail(`${file} missing ${token}`);
+    if (!process.exitCode) pass(label);
+  }
+}
+
+
+for (const [file, tokens, label] of [
+  ['docs/pilot-smoke-test-runbook.md', ['Pilot Smoke Test Runbook', 'Smoke Flow', 'Pass Criteria', 'Stop Criteria', 'No raw secrets', 'unresolved signing secret ref'], 'Pilot smoke test runbook defines safe standalone pilot verification'],
+  ['docs/sentinel-production-blockers.md', ['Distributed Rate Limiting', 'Durable Quarantine', 'Behavioral Security Tests', 'Secret Management / Rotation', 'Build/Typecheck/Lint Metadata', 'Operational Retention'], 'Sentinel production blockers remain explicit'],
+]) {
+  if (!exists(file)) fail(`Missing ${file}`);
+  else {
+    const source = read(file);
+    for (const token of tokens) if (!source.includes(token)) fail(`${file} missing ${token}`);
+    if (!process.exitCode) pass(label);
+  }
 }

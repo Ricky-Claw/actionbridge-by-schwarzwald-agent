@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
       if (connectorId) {
         const { data: webhookConnector } = await (serviceSupabase as any)
           .from('actionbridge_connectors')
-          .select('id,type,base_url,enabled,allowed_origins,network_execution_enabled,safety_status,permission_status')
+          .select('id,type,base_url,enabled,allowed_origins,network_execution_enabled,safety_status,permission_status,endpoint_path')
           .eq('user_id', user!.id)
           .eq('id', connectorId)
           .maybeSingle();
@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
                 tenantId: user!.id,
                 executionId,
                 payload: { leadSubmission: leadSubmission.safeResult },
-                path: '/',
+                path: typeof webhookConnector.endpoint_path === 'string' ? webhookConnector.endpoint_path : '/',
                 allowlist: parseServerActionBridgeAllowlist(webhookConnector.allowed_origins),
               });
             }

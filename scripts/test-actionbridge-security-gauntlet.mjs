@@ -174,6 +174,15 @@ else fail('lead submission unsafe delivery', 'pilot lead action must not post ar
 if (leadSubmission.includes('normalizeLeadSourceOrigin') && leadSubmission.includes('normalizeLeadSourcePath') && leadSubmission.includes('split(/[?#]/')) pass('lead submission strips source URL query/hash PII');
 else fail('lead source URL minimization', 'lead source origin/path must strip query/hash and reject unsafe URL forms');
 
+const webhookConnectorsRoute = read('src/frontend/app/api/actionbridge/connectors/route.ts');
+const webhookMigration = read('supabase/migrations/20260515230500_actionbridge_webhook_endpoint_path.sql');
+for (const token of ['normalizeActionBridgeWebhookEndpointPath', 'body.endpointPath ?? body.endpoint_path', 'endpoint_path', "endpointPath: connector.endpoint_path || '/'", 'actionbridge_connectors_endpoint_path_relative']) {
+  if (webhookConnectorsRoute.includes(token) || webhookMigration.includes(token)) pass(`webhook endpoint path marker: ${token}`);
+  else fail(`webhook endpoint path missing marker: ${token}`);
+}
+if (webhookConnectorsRoute.includes("startsWith('//')") && webhookConnectorsRoute.includes("split('?', 1)") && webhookConnectorsRoute.includes("split('#', 1)")) pass('webhook endpoint path strips query/hash and blocks absolute override');
+else fail('webhook endpoint path guard', 'endpoint path must be relative-only and strip query/hash before persistence');
+
 const webhookDelivery = read('src/frontend/lib/actionbridge/webhook-delivery.ts');
 for (const token of ['deliverActionBridgeWebhook', 'postPinnedHttpsJson', 'pinnedAddress', 'servername: input.target.hostname', 'Host: input.target.host', 'decideActionBridgeDnsPinning', 'validateActionBridgeTarget', 'X-ActionBridge-Idempotency-Digest', 'X-ActionBridge-Signature']) {
   if (webhookDelivery.includes(token)) pass(`webhook delivery marker: ${token}`);
@@ -182,6 +191,8 @@ for (const token of ['deliverActionBridgeWebhook', 'postPinnedHttpsJson', 'pinne
 if (!webhookDelivery.includes('form.submit') && !webhookDelivery.includes('StealthyFetcher') && !webhookDelivery.includes('request.body.target')) pass('webhook delivery avoids browser/form/body-target execution');
 else fail('webhook delivery unsafe primitive', 'webhook delivery must not use browser/form submit or caller supplied target');
 if (executeRoute.includes('deliverActionBridgeWebhook') && executeRoute.includes("webhookConnector?.type === 'webhook'") && executeRoute.includes('webhookDecision.allowed')) pass('execute route gates webhook delivery behind connector type and network controls');
+else fail('execute route webhook gate', 'webhook delivery must be gated by connector type and network execution controls');
+if (executeRoute.includes('endpoint_path') && executeRoute.includes("path: typeof webhookConnector.endpoint_path === 'string' ? webhookConnector.endpoint_path : '/'")) pass('execute route uses server-owned webhook endpoint path');
 else fail('execute route webhook gate', 'webhook delivery must be gated by connector type and network execution controls');
 for (const token of ['webhook_delivery_error', 'ACTIONBRIDGE_WEBHOOK_DELIVERY_FAILED', 'decideActionBridgeWebhookDeliveryThrottle', 'webhook_rate_limited', 'recordActionBridgeWebhookFailureQuarantine', 'quarantine_required', "if (!webhookResult.ok)", "status: finalExecutionStatus", "finalExecutionStatus === 'failed' ? 502 : 200"]) {
   if (executeRoute.includes(token)) pass(`execute route webhook failure marker: ${token}`);
@@ -261,13 +272,13 @@ process.exit(failed ? 1 : 0);
 
 
 const errorLog = read('src/frontend/lib/actionbridge/error-log.ts');
-for (const token of ['persistActionBridgeErrorEvent', 'redactActionBridgeValue', 'ActionBridgeErrorSeverity', 'critical', 'redacted_context', 'actionbridge_error_logs']) {
+for (const token of ['persistActionBridgeErrorEvent', 'redactActionBridgeValue', 'sanitizeActionBridgeErrorContext', 'maxDepth', 'maxKeys', '[circular]', 'ActionBridgeErrorSeverity', 'critical', 'redacted_context', 'actionbridge_error_logs']) {
   if (errorLog.includes(token)) pass(`error-log security marker: ${token}`);
   else fail(`error-log missing security marker: ${token}`);
 }
 if (errorLog.includes('secretValue') || errorLog.includes('idempotency_key')) fail('error-log must not expose raw secrets or raw idempotency keys');
 const errorsRoute = read('src/frontend/app/api/actionbridge/errors/route.ts');
-for (const token of ['auth.getUser', 'UNAUTHORIZED', 'actionbridge_error_logs', ".eq('user_id', user!.id)", 'toActionBridgeErrorLogView', 'ACTIONBRIDGE_ERROR_LOG_LIST_FAILED']) {
+for (const token of ['auth.getUser', 'UNAUTHORIZED', 'actionbridge_error_logs', ".eq('user_id', user!.id)", 'toActionBridgeErrorLogView', 'export async function PATCH', 'ACTIONBRIDGE_ERROR_STATUS_TRANSITION_BLOCKED', 'error_log.status_changed', 'ACTIONBRIDGE_ERROR_LOG_LIST_FAILED']) {
   if (errorsRoute.includes(token)) pass(`errors route security marker: ${token}`);
   else fail(`errors route missing security marker: ${token}`);
 }

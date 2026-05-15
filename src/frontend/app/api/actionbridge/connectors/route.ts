@@ -35,6 +35,20 @@ function normalizeActionBridgeAllowedOrigins(value: unknown): string[] | null {
   return [...origins];
 }
 
+
+function normalizeActionBridgeWebhookEndpointPath(value: unknown): string | null {
+  if (value === undefined || value === null || value === '') return '/';
+  if (typeof value !== 'string') return null;
+  const candidate = value.trim();
+  if (!candidate) return '/';
+  if (/^[a-z][a-z0-9+.-]*:/i.test(candidate) || candidate.startsWith('//')) return null;
+  const noHash = candidate.split('#', 1)[0] || '/';
+  const noQuery = noHash.split('?', 1)[0] || '/';
+  const path = noQuery.startsWith('/') ? noQuery : `/${noQuery}`;
+  if (path.includes('\\')) return null;
+  return path;
+}
+
 async function requireActionBridgeUser() {
   const supabase = await createClient();
   const { data: { user }, error } = await supabase.auth.getUser();
@@ -54,8 +68,11 @@ function parseActionBridgeConnectorDraft(body: Record<string, unknown>) {
       ? body.auth_mode
       : 'none';
   const authMode = type === 'website' ? 'none' : requestedAuthMode;
+  const endpointPath = type === 'webhook'
+    ? normalizeActionBridgeWebhookEndpointPath(body.endpointPath ?? body.endpoint_path)
+    : '/';
 
-  if (!name || !baseUrl) return null;
+  if (!name || !baseUrl || !endpointPath) return null;
 
   let parsedUrl: URL;
   try {
@@ -89,6 +106,7 @@ function parseActionBridgeConnectorDraft(body: Record<string, unknown>) {
     network_execution_enabled: false,
     safety_status: 'untested',
     permission_status: 'draft',
+    endpoint_path: endpointPath,
   };
 }
 
@@ -98,7 +116,7 @@ export async function GET() {
 
   const { data, error } = await (supabase as any)
     .from('actionbridge_connectors')
-    .select('id, user_id, name, type, base_url, auth_mode, enabled, allowed_origins, capabilities, network_execution_enabled, safety_status, permission_status, created_at, updated_at')
+    .select('id, user_id, name, type, base_url, auth_mode, enabled, allowed_origins, capabilities, network_execution_enabled, safety_status, permission_status, endpoint_path, created_at, updated_at')
     .eq('user_id', user!.id)
     .order('created_at', { ascending: false })
     .limit(100);
@@ -121,6 +139,7 @@ export async function GET() {
       networkExecutionEnabled: connector.network_execution_enabled === true,
       safetyStatus: connector.safety_status,
       permissionStatus: connector.permission_status,
+      endpointPath: connector.endpoint_path || '/',
       createdAt: connector.created_at,
       updatedAt: connector.updated_at,
     })),
@@ -158,7 +177,7 @@ export async function POST(request: NextRequest) {
       user_id: user!.id,
       ...draft,
     })
-    .select('id, user_id, name, type, base_url, auth_mode, enabled, allowed_origins, capabilities, network_execution_enabled, safety_status, permission_status, created_at, updated_at')
+    .select('id, user_id, name, type, base_url, auth_mode, enabled, allowed_origins, capabilities, network_execution_enabled, safety_status, permission_status, endpoint_path, created_at, updated_at')
     .single();
 
   if (error || !data) {
@@ -179,6 +198,7 @@ export async function POST(request: NextRequest) {
       networkExecutionEnabled: data.network_execution_enabled === true,
       safetyStatus: data.safety_status,
       permissionStatus: data.permission_status,
+      endpointPath: data.endpoint_path || '/',
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     },

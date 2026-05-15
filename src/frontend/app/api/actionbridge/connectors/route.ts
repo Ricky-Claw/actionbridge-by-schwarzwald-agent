@@ -5,8 +5,9 @@ import { createClient } from '@/lib/supabase/server';
 import { redactActionBridgeValue } from '@/lib/actionbridge/redaction';
 import { createCoreServiceClient } from '@/lib/core/service-client';
 import { isPrivateActionBridgeHost } from '@/lib/actionbridge/http-connector';
+import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
 
-const ACTIONBRIDGE_CONNECTOR_TYPES = new Set(['http', 'website']);
+const ACTIONBRIDGE_CONNECTOR_TYPES = new Set(['http', 'website', 'webhook']);
 const ACTIONBRIDGE_AUTH_MODES = new Set(['none', 'bearer', 'api_key', 'basic']);
 
 function normalizeActionBridgeAllowedOrigins(value: unknown): string[] | null {
@@ -82,7 +83,9 @@ function parseActionBridgeConnectorDraft(body: Record<string, unknown>) {
     allowed_origins: allowedOrigins,
     capabilities: type === 'website'
       ? ['public_page_extract', 'same_origin_route_discovery', 'metadata_extract', 'form_inventory', 'no_form_submit', 'networkExecution:false']
-      : [],
+      : type === 'webhook'
+        ? ['webhook.v1', 'lead.submit', 'approval_required', 'no_redirects', 'server_allowlist_required']
+        : [],
     network_execution_enabled: false,
     safety_status: 'untested',
     permission_status: 'draft',
@@ -180,4 +183,72 @@ export async function POST(request: NextRequest) {
       updatedAt: data.updated_at,
     },
   }, { status: 201 });
+}
+
+export async function PATCH(request: NextRequest) {
+  const { supabase, user, response } = await requireActionBridgeUser();
+  if (response) return response;
+
+  const body = await request.json().catch(() => ({}));
+  const bodyObject = body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : {};
+  const connectorId = typeof bodyObject.connectorId === 'string'
+    ? bodyObject.connectorId.trim()
+    : typeof bodyObject.connector_id === 'string'
+      ? bodyObject.connector_id.trim()
+      : '';
+  if (!connectorId || typeof bodyObject.networkExecutionEnabled !== 'boolean') {
+    return NextResponse.json({ error: 'INVALID_ACTIONBRIDGE_CONNECTOR_UPDATE', redactedInput: redactActionBridgeValue(bodyObject) }, { status: 400 });
+  }
+
+  const { data: connector } = await (supabase as any)
+    .from('actionbridge_connectors')
+    .select('id,user_id,type,allowed_origins,safety_status,permission_status,network_execution_enabled')
+    .eq('user_id', user!.id)
+    .eq('id', connectorId)
+    .maybeSingle();
+  if (!connector) return NextResponse.json({ error: 'ACTIONBRIDGE_CONNECTOR_NOT_FOUND' }, { status: 404 });
+
+  const enableNetworkExecution = bodyObject.networkExecutionEnabled === true;
+  if (enableNetworkExecution) {
+    const allowedOrigins = Array.isArray(connector.allowed_origins) ? connector.allowed_origins : [];
+    if (connector.type !== 'webhook' || connector.safety_status !== 'pass' || connector.permission_status !== 'active' || allowedOrigins.length < 1) {
+      return NextResponse.json({
+        error: 'ACTIONBRIDGE_NETWORK_EXECUTION_REQUIRES_VERIFIED_WEBHOOK_CONNECTOR',
+        redactedInput: redactActionBridgeValue(bodyObject),
+      }, { status: 409 });
+    }
+  }
+
+  const serviceSupabase = createCoreServiceClient();
+  if (!serviceSupabase) return NextResponse.json({ error: 'ACTIONBRIDGE_CONNECTOR_UPDATE_FAILED' }, { status: 503 });
+
+  const { data, error } = await (serviceSupabase as any)
+    .from('actionbridge_connectors')
+    .update({ network_execution_enabled: enableNetworkExecution, updated_at: new Date().toISOString() })
+    .eq('user_id', user!.id)
+    .eq('id', connectorId)
+    .select('id,user_id,type,network_execution_enabled,safety_status,permission_status,updated_at')
+    .single();
+  if (error || !data) return NextResponse.json({ error: 'ACTIONBRIDGE_CONNECTOR_UPDATE_FAILED' }, { status: 409 });
+
+  await persistActionBridgeControlAuditEvent(serviceSupabase, {
+    userId: user!.id,
+    connectorId,
+    eventName: enableNetworkExecution ? 'network_execution.enabled' : 'network_execution.disabled',
+    input: { connectorId, networkExecutionEnabled: enableNetworkExecution },
+    status: 'succeeded',
+    resultSummary: { connectorId, type: data.type, networkExecutionEnabled: data.network_execution_enabled, safetyStatus: data.safety_status, permissionStatus: data.permission_status },
+  });
+
+  return NextResponse.json({
+    connector: {
+      id: data.id,
+      tenantId: data.user_id,
+      type: data.type,
+      networkExecutionEnabled: data.network_execution_enabled === true,
+      safetyStatus: data.safety_status,
+      permissionStatus: data.permission_status,
+      updatedAt: data.updated_at,
+    },
+  });
 }

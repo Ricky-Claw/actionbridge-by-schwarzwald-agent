@@ -15,6 +15,7 @@ import { actionBridgeAuditTaxonomy } from '@/lib/actionbridge/audit-taxonomy';
 import { summarizeActionBridgeResponseLimitPolicy } from '@/lib/actionbridge/response-limits';
 import { executeActionBridgeReadOnlyGet } from '@/lib/actionbridge/read-only-executor';
 import { persistActionBridgeLeadSubmission } from '@/lib/actionbridge/lead-submission';
+import { deliverActionBridgeWebhook } from '@/lib/actionbridge/webhook-delivery';
 
 async function requireActionBridgeUser() {
   const supabase = await createClient();
@@ -93,6 +94,7 @@ export async function POST(request: NextRequest) {
       riskLevel: consumed.execution.riskLevel,
       networkExecution: false,
     };
+    let finalExecutionStatus: 'succeeded' | 'failed' = 'succeeded';
 
     if (!consumed.execution.reused && consumed.execution.executionStatus === 'executing' && consumed.execution.actionName === 'lead.submit') {
       const leadSubmission = await persistActionBridgeLeadSubmission(serviceSupabase, {
@@ -124,6 +126,64 @@ export async function POST(request: NextRequest) {
         }, { status: 503 });
       }
       safeResult = leadSubmission.safeResult;
+
+      const connectorId = typeof approvalSnapshot.connectorId === 'string' ? approvalSnapshot.connectorId : '';
+      if (connectorId) {
+        const { data: webhookConnector } = await (serviceSupabase as any)
+          .from('actionbridge_connectors')
+          .select('id,type,base_url,enabled,allowed_origins,network_execution_enabled,safety_status,permission_status')
+          .eq('user_id', user!.id)
+          .eq('id', connectorId)
+          .maybeSingle();
+        const webhookControls = normalizeActionBridgeExecutionControls({
+          networkExecutionEnabled: webhookConnector?.network_execution_enabled === true,
+          safetyStatus: (webhookConnector?.safety_status || 'untested') as any,
+          permissionStatus: (webhookConnector?.permission_status || 'draft') as any,
+        });
+        const webhookDecision = decideActionBridgeNetworkExecutionControls(webhookControls);
+        if (webhookConnector?.type === 'webhook' && webhookDecision.allowed) {
+          let webhookResult;
+          try {
+            webhookResult = await deliverActionBridgeWebhook({
+              connector: { id: webhookConnector.id, baseUrl: webhookConnector.base_url, enabled: webhookConnector.enabled === true },
+              action: { id: consumed.execution.actionId, name: consumed.execution.actionName, riskLevel: consumed.execution.riskLevel },
+              approval: { id: consumed.execution.approvalId, idempotencyKeyDigest: summarizeIdempotencyKey(consumed.execution.idempotencyKey) },
+              tenantId: user!.id,
+              executionId,
+              payload: { leadSubmission: leadSubmission.safeResult },
+              path: '/',
+              allowlist: parseServerActionBridgeAllowlist(webhookConnector.allowed_origins),
+            });
+          } catch (error) {
+            webhookResult = {
+              ok: false,
+              status: 502,
+              networkExecution: true,
+              resultSummary: {
+                status: 'webhook_delivery_error',
+                reason: 'Webhook delivery failed closed before a successful response was recorded.',
+                errorCode: error instanceof Error && error.message === 'ACTIONBRIDGE_WEBHOOK_TIMEOUT'
+                  ? 'ACTIONBRIDGE_WEBHOOK_TIMEOUT'
+                  : 'ACTIONBRIDGE_WEBHOOK_DELIVERY_FAILED',
+                error: redactActionBridgeValue(error instanceof Error ? { name: error.name, message: error.message } : { message: String(error) }),
+                networkExecution: true,
+              },
+            };
+          }
+          if (!webhookResult.ok) finalExecutionStatus = 'failed';
+          safeResult = {
+            ...safeResult,
+            webhook: webhookResult.resultSummary,
+            networkExecution: webhookResult.networkExecution,
+          };
+        } else if (webhookConnector?.type === 'webhook') {
+          safeResult = {
+            ...safeResult,
+            webhook: { status: 'webhook_blocked', reason: webhookDecision.reason, networkExecution: false },
+            networkExecution: false,
+          };
+        }
+      }
     }
 
     if (!consumed.execution.reused && consumed.execution.executionStatus === 'executing') {
@@ -131,8 +191,9 @@ export async function POST(request: NextRequest) {
         userId: user!.id,
         executionId,
         approvalId: consumed.execution.approvalId,
-        status: 'succeeded',
+        status: finalExecutionStatus,
         safeResult,
+        errorCode: finalExecutionStatus === 'failed' ? 'ACTIONBRIDGE_WEBHOOK_DELIVERY_FAILED' : undefined,
       });
 
       if (persistedResult.error) {
@@ -146,18 +207,18 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      decision: 'allow',
-      status: 'policy_check_succeeded_without_execution',
+      decision: finalExecutionStatus === 'failed' ? 'deny' : 'allow',
+      status: finalExecutionStatus === 'failed' ? 'execution_failed' : 'policy_check_succeeded_without_execution',
       operatorMessage: consumed.execution.actionName === 'lead.submit'
         ? 'Approved lead submitted to the ActionBridge lead outbox. No arbitrary external form post occurred.'
         : 'Approval consumed as a dry-run policy check. No network execution occurred.',
-      networkExecution: false,
+      networkExecution: Boolean(safeResult.networkExecution),
       approvalId: consumed.execution.approvalId,
       executionId,
       idempotencyKeyDigest: summarizeIdempotencyKey(consumed.execution.idempotencyKey),
       reused: consumed.execution.reused,
-      result: { ...safeResult, networkExecution: false },
-    });
+      result: { ...safeResult, networkExecution: Boolean(safeResult.networkExecution) },
+    }, { status: finalExecutionStatus === 'failed' ? 502 : 200 });
   }
   const serverPolicy = await getServerActionBridgePolicy(supabase, user!.id, requestedActionName);
   const { actionId, actionName, riskLevel, explicitAllow, approvalConfigured } = serverPolicy;
@@ -183,7 +244,7 @@ export async function POST(request: NextRequest) {
       .eq('id', actionForPlan.connector_id)
       .maybeSingle()
     : { data: null };
-  const connectorForPlan = connectorRecord as { id?: string; type?: 'http' | 'website' | null; base_url?: string; enabled?: boolean | null; allowed_origins?: unknown; capabilities?: unknown; network_execution_enabled?: boolean | null; safety_status?: string | null; permission_status?: string | null } | null;
+  const connectorForPlan = connectorRecord as { id?: string; type?: 'http' | 'website' | 'webhook' | null; base_url?: string; enabled?: boolean | null; allowed_origins?: unknown; capabilities?: unknown; network_execution_enabled?: boolean | null; safety_status?: string | null; permission_status?: string | null } | null;
   const allowlist = parseServerActionBridgeAllowlist(connectorForPlan?.allowed_origins);
   const networkExecutionControls = normalizeActionBridgeExecutionControls({
     networkExecutionEnabled: connectorForPlan?.network_execution_enabled === true,

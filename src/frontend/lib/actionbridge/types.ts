@@ -28,7 +28,7 @@ export type ActionBridgePermissionStatus = 'draft' | 'active' | 'paused' | 'revo
 export interface ActionBridgeConnector {
   id: string;
   tenantId: string;
-  type: 'http' | 'website';
+  type: 'http' | 'website' | 'webhook';
   name: string;
   baseUrl: string;
   authMode: 'none' | 'bearer' | 'api_key' | 'basic';

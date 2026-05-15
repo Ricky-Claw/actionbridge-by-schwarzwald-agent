@@ -27,6 +27,7 @@ const requiredFiles = [
   'src/frontend/lib/actionbridge/schema-safety.ts',
   'src/frontend/lib/actionbridge/read-only-executor.ts',
   'src/frontend/lib/actionbridge/lead-submission.ts',
+  'src/frontend/lib/actionbridge/webhook-delivery.ts',
   'src/frontend/lib/actionbridge/domain-verification.ts',
   'src/frontend/lib/actionbridge/setup-links.ts',
   'src/frontend/lib/actionbridge/setup-session.ts',
@@ -161,6 +162,13 @@ if (!process.exitCode) {
   }
   if (!process.exitCode) pass('ActionBridge lead submission creates approval-gated outbox records without external form submit');
 
+  const webhookDelivery = read('src/frontend/lib/actionbridge/webhook-delivery.ts');
+  for (const token of ['deliverActionBridgeWebhook', 'actionbridge.webhook.v1', "method: 'POST'", 'postPinnedHttpsJson', 'pinnedAddress', 'servername: input.target.hostname', 'Host: input.target.host', 'decideActionBridgeDnsPinning', 'validateActionBridgeTarget', 'X-ActionBridge-Idempotency-Digest', 'X-ActionBridge-Signature', 'timeout: input.timeoutMs', 'enforceActionBridgeResponseByteLimit']) {
+    if (!webhookDelivery.includes(token)) fail(`webhook-delivery.ts missing ${token}`);
+  }
+  if (webhookDelivery.includes('form.submit') || webhookDelivery.includes('StealthyFetcher')) fail('webhook delivery must not use browser/RPA/form submit');
+  if (!process.exitCode) pass('ActionBridge Webhook-v1 delivery enforces allowlist, DNS/IP pinned connect, no redirects, timeout, idempotency, and redaction');
+
   const capabilityRules = read('src/frontend/lib/actionbridge/capability-rules.ts');
   for (const token of ['ACTIONBRIDGE_CAPABILITY_DEFINITIONS', 'site.knowledge.read', 'lead.prepare_draft', 'lead.submit', 'appointment.request.prepare_draft', 'requiresApproval: true', 'riskLevel: \'write\'', 'sanitizeActionBridgeInputSchema', 'compileActionBridgeCapabilityTool']) {
     if (!capabilityRules.includes(token)) fail(`capability-rules.ts missing ${token}`);
@@ -283,6 +291,15 @@ else {
   if (!process.exitCode) pass('Build/verification gate doc defines current and production checks');
 }
 
+if (!exists('docs/actionbridge-scope-plan.md')) fail('Missing ActionBridge scope plan');
+else {
+  const scopePlan = read('docs/actionbridge-scope-plan.md');
+  for (const token of ['Phase 1', 'Controlled Pilot MVP', 'Phase 2', 'Standalone Usability', 'Phase 3', 'Production Safety', 'Phase 4', 'Connector Expansion', 'Phase 5', 'Integration Readiness', 'Keine Schwarzwald-Agent Integration vor standalone DoD']) {
+    if (!scopePlan.includes(token)) fail(`scope plan missing ${token}`);
+  }
+  if (!process.exitCode) pass('ActionBridge scope plan defines phased standalone-to-integration roadmap');
+}
+
 const routeFiles = [
   'src/frontend/app/api/actionbridge/actions/route.ts',
   'src/frontend/app/api/actionbridge/connectors/route.ts',
@@ -328,9 +345,9 @@ if (!process.exitCode) {
   }
   if (!connectorsRoute.includes('actionbridge_connectors')) fail('connectors route must persist/list actionbridge_connectors');
   if (!connectorsRoute.includes(".eq('user_id', user!.id)")) fail('connectors route must scope reads to authenticated owner');
-  if (!connectorsRoute.includes('createCoreServiceClient')) fail('connectors route must use server-only service client for connector creation');
+  if (!connectorsRoute.includes('createCoreServiceClient')) fail('connectors route must use server-only service client for connector creation/update');
   if (!connectorsRoute.includes('ACTIONBRIDGE_CONNECTOR_CREATE_FAILED')) fail('connectors route must fail closed on connector creation errors');
-  if (!connectorsRoute.includes("new Set(['http', 'website'])")) fail('connectors route must allow website connector type');
+  if (!connectorsRoute.includes("new Set(['http', 'website', 'webhook'])")) fail('connectors route must allow website and webhook connector types');
   if (!connectorsRoute.includes('public_page_extract') || !connectorsRoute.includes('no_form_submit')) fail('website connectors must persist public extraction guardrail capabilities');
   if (!connectorsRoute.includes('parsedUrl.username') || !connectorsRoute.includes('parsedUrl.password')) fail('connectors route must reject URL userinfo secrets');
   if (!connectorsRoute.includes("const authMode = type === 'website' ? 'none'")) fail('website connectors must force auth_mode none');
@@ -618,7 +635,8 @@ if (migrationFiles.length) {
   if (!migration.includes('idempotencyKeyDigest') || !migration.includes("digest(p_idempotency_key, 'sha256')")) {
     fail('ActionBridge migration audit summary must store only idempotency key digest');
   }
-  if (!process.exitCode) pass('ActionBridge migration defines consume-once approval execution state, immutable snapshots, and digest-only idempotency audit');
+  if (!migration.includes("type IN ('http', 'website', 'webhook')")) fail('ActionBridge migrations must allow webhook connector type');
+  if (!process.exitCode) pass('ActionBridge migration defines consume-once approval execution state, immutable snapshots, digest-only idempotency audit, and webhook connector type');
 }
 
 process.exit(process.exitCode || 0);

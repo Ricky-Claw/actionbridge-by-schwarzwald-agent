@@ -92,7 +92,7 @@ ActionBridge gilt als fertig, wenn:
 ## 9. Aktuelle Risiken / offene Entscheidungen
 - `lead.submit` ist aktuell ein sicherer interner Connector-Delivery-State, noch kein geprüfter externer CRM/Formular/Webhook-Adapter.
 - Kein Lead-/Inbox-Produkt bauen; Produktnutzen muss über Schwarzwald-Agent und Kundensysteme sichtbar werden.
-- Rate Limits für öffentliche Setup-/Handshake-/Verification-Endpunkte fehlen noch als echte Runtime-Grenze.
+- Pilot-Rate-Limit-Gates für öffentliche Setup-/Handshake-/Verification-Endpunkte sind vorhanden, aber nur process-local; Produktion braucht verteiltes Redis/KV/CDN/WAF Rate Limiting.
 - Kein echter Next/TypeScript Build-Gate im Repo sichtbar (`tsconfig`/Next config fehlt).
 - Production network/write execution braucht staging SSRF/DNS Tests und separate Freigabe.
 - Dashboard UX ist Demo/Skeleton, noch nicht voll produktiv.
@@ -101,7 +101,7 @@ ActionBridge gilt als fertig, wenn:
 ## 10. Nächste 10 Arbeitsschritte nach Priorität
 1. Scope bereinigen: keine Lead-Outbox-UI/API als Produktziel; `lead.submit` nur als Connector-Delivery-State behandeln.
 2. Pilot-Runbook schreiben: Setup, Domain Verification, Capability, Approval, Connector-Execution, Revoke/Kill-Switch.
-3. Rate-Limit-Konzept und enforcebare Gate-Marker für public token endpoints ergänzen.
+3. Verteiltes Production-Rate-Limit-Konzept vorbereiten: Redis/KV/CDN/WAF, trusted proxy headers, tenant/connector/token scopes.
 4. Ersten echten externen Adapter spezifizieren und bauen: Webhook-v1 mit Schema, Allowlist, Auth-Ref, Retry/Fallback, Rate Limit, Audit.
 5. Setup/Operator UX aktualisieren: ActionBridge als Connector erklären, nicht als CRM/Lead-Inbox.
 6. Typecheck/Build-Struktur definieren oder dokumentieren, warum aktuell nicht ausführbar.

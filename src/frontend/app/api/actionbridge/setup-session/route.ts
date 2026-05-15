@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createCoreServiceClient } from '@/lib/core/service-client';
 import { createActionBridgeSetupSessionView, digestActionBridgeSetupSessionToken, isActionBridgeSetupSessionUsable } from '@/lib/actionbridge/setup-session';
+import { enforceActionBridgeRateLimit } from '@/lib/actionbridge/rate-limit';
 
 function getToken(request: NextRequest): string {
   const url = new URL(request.url);
@@ -11,6 +12,8 @@ function getToken(request: NextRequest): string {
 
 export async function GET(request: NextRequest) {
   const token = getToken(request);
+  const rateLimit = enforceActionBridgeRateLimit({ request, policyName: 'setupSession', discriminator: token.slice(0, 16) });
+  if (!rateLimit.ok) return rateLimit.response!;
   if (!token || token.length < 12 || token.length > 160 || !token.startsWith('absl_')) {
     return NextResponse.json({ error: 'INVALID_ACTIONBRIDGE_SETUP_SESSION_TOKEN' }, { status: 400 });
   }

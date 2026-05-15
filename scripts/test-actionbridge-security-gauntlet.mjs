@@ -187,10 +187,25 @@ else fail('bridge installation revocation gate', 'revoked bridge installations c
 if (bridgeHandshakeRoute.includes("update({ status: 'completed' })") && bridgeHandshakeRoute.includes("eventName: 'bridge.handshake.connected'")) pass('bridge handshake completes setup link and audits connection');
 else fail('bridge handshake completion/audit gate', 'successful bridge handshakes must close setup replay and audit connection');
 
+const rateLimit = read('src/frontend/lib/actionbridge/rate-limit.ts');
+for (const token of ['ACTIONBRIDGE_RATE_LIMITED', 'Retry-After', 'setupSession', 'bridgeHandshake', 'domainVerification', 'keyDigest']) {
+  if (rateLimit.includes(token)) pass(`rate-limit marker: ${token}`);
+  else fail(`rate-limit missing marker: ${token}`);
+}
+
 const setupLinksRoute = read('src/frontend/app/api/actionbridge/setup-links/route.ts');
 const setupSessionRoute = read('src/frontend/app/api/actionbridge/setup-session/route.ts');
 const verifyRoute = read('src/frontend/app/api/actionbridge/connectors/verify/route.ts');
 const capabilitiesRoute = read('src/frontend/app/api/actionbridge/capabilities/route.ts');
+for (const [label, source, marker] of [
+  ['setup session rate limit', setupSessionRoute, "policyName: 'setupSession'"],
+  ['bridge handshake rate limit', bridgeHandshakeRoute, "policyName: 'bridgeHandshake'"],
+  ['verification rate limit', verifyRoute, "policyName: 'domainVerification'"],
+]) {
+  if (source.includes('enforceActionBridgeRateLimit') && source.includes(marker)) pass(`route rate-limit marker: ${label}`);
+  else fail(`missing route rate-limit marker: ${label}`);
+}
+
 for (const [label, source, marker] of [
   ['setup link creation audit', setupLinksRoute, "eventName: 'setup_link.created'"],
   ['verification challenge audit', verifyRoute, "eventName: 'domain_verification.challenge_issued'"],

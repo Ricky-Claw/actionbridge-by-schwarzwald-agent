@@ -4,8 +4,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createCoreServiceClient } from '@/lib/core/service-client';
 import { parseActionBridgeBridgeHandshake } from '@/lib/actionbridge/bridge-handshake';
 import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
+import { enforceActionBridgeRateLimit } from '@/lib/actionbridge/rate-limit';
 
 export async function POST(request: NextRequest) {
+  const rateLimit = enforceActionBridgeRateLimit({ request, policyName: 'bridgeHandshake' });
+  if (!rateLimit.ok) return rateLimit.response!;
+
   const body = await request.json().catch(() => ({}));
   const originHeader = request.headers.get('origin') || '';
   const parsed = parseActionBridgeBridgeHandshake({

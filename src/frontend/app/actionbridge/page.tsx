@@ -6,7 +6,7 @@ const screens = [
   ['/actionbridge/demo-tenant', 'Demo tenant', 'Controlled example business for recordings.'],
   ['/actionbridge/trust', 'Trust center', 'Security controls customers can understand.'],
   ['/actionbridge/audit-preview', 'Audit timeline', 'Visible proof of safe execution.'],
-  ['/actionbridge/tool-preview', 'Tool preview', 'What Schwarzwald-Agent receives.'],
+  ['/actionbridge/tool-preview', 'Tool preview', 'What an agent runtime receives.'],
   ['/actionbridge/failures', 'Failure states', 'Unsafe paths stop with clear reasons.'],
   ['/actionbridge/sales', 'Sales narrative', 'One-page commercial framing.'],
 ];
@@ -19,7 +19,7 @@ export default function ActionBridgeExperienceIndexPage() {
           <p className="text-sm font-semibold uppercase tracking-[0.35em] text-emerald-300">ActionBridge Experience Map</p>
           <h1 className="mt-4 text-5xl font-black tracking-tight">The MVP is a trust journey, not a pile of endpoints.</h1>
           <p className="mt-4 max-w-3xl text-stone-300">
-            Start here for the Schwarzwald-Agent style demo path: pitch, operator cockpit, customer setup,
+            Start here for the standalone connector path: pitch, operator cockpit, customer setup,
             permissions, trust proof, audit, tool preview, failure states, and sales framing.
           </p>
         </header>

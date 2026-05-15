@@ -1,6 +1,7 @@
 const rows = [
   ['site.knowledge.read', 'Read', 'No', 'Allowed public knowledge only'],
-  ['lead.prepare_draft', 'Write draft', 'Yes', 'Prepare text; submit nothing'],
+  ['lead.prepare_draft', 'Write draft', 'Yes', 'Prepare connector payload; deliver nothing'],
+  ['lead.submit', 'Write', 'Yes', 'Approved connector delivery state only'],
   ['appointment.request.prepare_draft', 'Write draft', 'Yes', 'Prepare request; no calendar write'],
   ['payment.charge', 'Transactional', 'Blocked', 'Not in MVP'],
   ['crm.contact.delete', 'Destructive', 'Blocked', 'Not in MVP'],

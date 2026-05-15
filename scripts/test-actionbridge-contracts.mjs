@@ -18,6 +18,7 @@ const requiredFiles = [
   'src/frontend/lib/actionbridge/execution-plan.ts',
   'src/frontend/lib/actionbridge/execution-controls.ts',
   'src/frontend/lib/actionbridge/response-limits.ts',
+  'src/frontend/lib/actionbridge/rate-limit.ts',
   'src/frontend/lib/actionbridge/audit-taxonomy.ts',
   'src/frontend/lib/actionbridge/website-connector.ts',
   'src/frontend/lib/actionbridge/website-extraction-guards.ts',
@@ -233,6 +234,12 @@ if (!process.exitCode) {
   }
   if (!process.exitCode) pass('ActionBridge response limit contract is defined');
 
+  const rateLimit = read('src/frontend/lib/actionbridge/rate-limit.ts');
+  for (const token of ['enforceActionBridgeRateLimit', 'ACTIONBRIDGE_RATE_LIMITED', 'Retry-After', 'setupSession', 'bridgeHandshake', 'domainVerification', 'keyDigest']) {
+    if (!rateLimit.includes(token)) fail(`rate-limit.ts missing ${token}`);
+  }
+  if (!process.exitCode) pass('ActionBridge rate limit contract protects public/token-adjacent endpoints');
+
   const auditTaxonomy = read('src/frontend/lib/actionbridge/audit-taxonomy.ts');
   for (const token of ['ActionBridgeAuditCategory', 'execution_control', 'target_validation', 'dry_run_result', 'ACTIONBRIDGE_KILL_SWITCH_BLOCKED', 'ACTIONBRIDGE_APPROVAL_CONSUMED', 'ACTIONBRIDGE_IDEMPOTENCY_REPLAY', 'ACTIONBRIDGE_NETWORK_EXECUTOR_UNAVAILABLE', 'ACTIONBRIDGE_EXECUTION_RESULT_PERSISTED', 'networkExecution: false']) {
     if (!auditTaxonomy.includes(token)) fail(`audit-taxonomy.ts missing ${token}`);
@@ -256,6 +263,24 @@ else {
     if (!runbook.includes(token)) fail(`pilot runbook missing ${token}`);
   }
   if (!process.exitCode) pass('ActionBridge pilot runbook documents standalone setup, verification, approval, execution, and exit gates');
+}
+
+if (!exists('docs/specs/actionbridge-webhook-v1-adapter.md')) fail('Missing Webhook-v1 adapter spec');
+else {
+  const webhookSpec = read('docs/specs/actionbridge-webhook-v1-adapter.md');
+  for (const token of ['Webhook-v1', 'lead.submit', 'HTTPS only', 'No redirects', 'Exact origin allowlist', 'Idempotency', 'HMAC signature', 'No arbitrary form submission', 'No dashboard CRM/lead inbox']) {
+    if (!webhookSpec.includes(token)) fail(`Webhook-v1 spec missing ${token}`);
+  }
+  if (!process.exitCode) pass('Webhook-v1 adapter spec defines safe standalone connector delivery contract');
+}
+
+if (!exists('docs/build-and-verification-gates.md')) fail('Missing build and verification gates doc');
+else {
+  const gates = read('docs/build-and-verification-gates.md');
+  for (const token of ['npm test', 'git diff --check', 'Not Yet Available', 'tsconfig.json', 'npm run build', 'Autopilot Rule']) {
+    if (!gates.includes(token)) fail(`build gates doc missing ${token}`);
+  }
+  if (!process.exitCode) pass('Build/verification gate doc defines current and production checks');
 }
 
 const routeFiles = [

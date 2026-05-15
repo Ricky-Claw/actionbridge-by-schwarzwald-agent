@@ -16,6 +16,7 @@ import { summarizeActionBridgeResponseLimitPolicy } from '@/lib/actionbridge/res
 import { executeActionBridgeReadOnlyGet } from '@/lib/actionbridge/read-only-executor';
 import { persistActionBridgeLeadSubmission } from '@/lib/actionbridge/lead-submission';
 import { deliverActionBridgeWebhook } from '@/lib/actionbridge/webhook-delivery';
+import { decideActionBridgeWebhookDeliveryThrottle, recordActionBridgeWebhookFailureQuarantine } from '@/lib/actionbridge/rate-limit';
 
 async function requireActionBridgeUser() {
   const supabase = await createClient();
@@ -143,17 +144,41 @@ export async function POST(request: NextRequest) {
         const webhookDecision = decideActionBridgeNetworkExecutionControls(webhookControls);
         if (webhookConnector?.type === 'webhook' && webhookDecision.allowed) {
           let webhookResult;
+          const webhookDestinationOrigin = (() => {
+            try { return new URL(webhookConnector.base_url).origin; } catch { return 'invalid-origin'; }
+          })();
+          const webhookThrottle = decideActionBridgeWebhookDeliveryThrottle({
+            request,
+            tenantId: user!.id,
+            connectorId: webhookConnector.id,
+            actionName: consumed.execution.actionName,
+            destinationOrigin: webhookDestinationOrigin,
+          });
           try {
-            webhookResult = await deliverActionBridgeWebhook({
-              connector: { id: webhookConnector.id, baseUrl: webhookConnector.base_url, enabled: webhookConnector.enabled === true },
-              action: { id: consumed.execution.actionId, name: consumed.execution.actionName, riskLevel: consumed.execution.riskLevel },
-              approval: { id: consumed.execution.approvalId, idempotencyKeyDigest: summarizeIdempotencyKey(consumed.execution.idempotencyKey) },
-              tenantId: user!.id,
-              executionId,
-              payload: { leadSubmission: leadSubmission.safeResult },
-              path: '/',
-              allowlist: parseServerActionBridgeAllowlist(webhookConnector.allowed_origins),
-            });
+            if (!webhookThrottle.ok) {
+              webhookResult = {
+                ok: false,
+                status: 429,
+                networkExecution: false,
+                resultSummary: {
+                  status: 'webhook_rate_limited',
+                  reason: 'Webhook-v1 pilot delivery throttle blocked this attempt.',
+                  rateLimit: { policy: 'webhookDelivery', keyDigest: webhookThrottle.keyDigest, resetAt: webhookThrottle.resetAt, retryAfterSeconds: webhookThrottle.retryAfterSeconds },
+                  networkExecution: false,
+                },
+              };
+            } else {
+              webhookResult = await deliverActionBridgeWebhook({
+                connector: { id: webhookConnector.id, baseUrl: webhookConnector.base_url, enabled: webhookConnector.enabled === true },
+                action: { id: consumed.execution.actionId, name: consumed.execution.actionName, riskLevel: consumed.execution.riskLevel },
+                approval: { id: consumed.execution.approvalId, idempotencyKeyDigest: summarizeIdempotencyKey(consumed.execution.idempotencyKey) },
+                tenantId: user!.id,
+                executionId,
+                payload: { leadSubmission: leadSubmission.safeResult },
+                path: '/',
+                allowlist: parseServerActionBridgeAllowlist(webhookConnector.allowed_origins),
+              });
+            }
           } catch (error) {
             webhookResult = {
               ok: false,
@@ -170,7 +195,25 @@ export async function POST(request: NextRequest) {
               },
             };
           }
-          if (!webhookResult.ok) finalExecutionStatus = 'failed';
+          if (!webhookResult.ok) {
+            finalExecutionStatus = 'failed';
+            const quarantine = recordActionBridgeWebhookFailureQuarantine({
+              request,
+              tenantId: user!.id,
+              connectorId: webhookConnector.id,
+              actionName: consumed.execution.actionName,
+              destinationOrigin: webhookDestinationOrigin,
+            });
+            webhookResult.resultSummary = {
+              ...webhookResult.resultSummary,
+              quarantine: {
+                policy: 'webhookFailureQuarantine',
+                status: quarantine.ok ? 'recorded' : 'quarantine_required',
+                keyDigest: quarantine.keyDigest,
+                resetAt: quarantine.resetAt,
+              },
+            };
+          }
           safeResult = {
             ...safeResult,
             webhook: webhookResult.resultSummary,

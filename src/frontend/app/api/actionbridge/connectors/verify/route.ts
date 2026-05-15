@@ -11,7 +11,7 @@ import {
   type ActionBridgeVerificationMethod,
 } from '@/lib/actionbridge/domain-verification';
 import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
-import { enforceActionBridgeRateLimit } from '@/lib/actionbridge/rate-limit';
+import { createActionBridgeRateLimitHeaders, enforceActionBridgeRateLimit } from '@/lib/actionbridge/rate-limit';
 
 const METHODS = new Set<ActionBridgeVerificationMethod>(['well_known', 'meta_tag', 'dns_txt']);
 
@@ -98,7 +98,10 @@ export async function POST(request: NextRequest) {
       instructions: challenge.instructions,
       expiresAt: data.expires_at,
     },
-  }, { status: 201 });
+  }, {
+    status: 201,
+    headers: createActionBridgeRateLimitHeaders({ policyName: 'domainVerification', remaining: rateLimit.remaining, resetAt: rateLimit.resetAt }),
+  });
 }
 
 export async function PATCH(request: NextRequest) {
@@ -172,5 +175,8 @@ export async function PATCH(request: NextRequest) {
     });
   }
 
-  return NextResponse.json({ verification: { id: verificationId, status: result.status, networkExecution: result.networkExecution, evidence: redactActionBridgeValue(result.evidence) } }, { status: result.ok ? 200 : 409 });
+  return NextResponse.json({ verification: { id: verificationId, status: result.status, networkExecution: result.networkExecution, evidence: redactActionBridgeValue(result.evidence) } }, {
+    status: result.ok ? 200 : 409,
+    headers: createActionBridgeRateLimitHeaders({ policyName: 'domainVerification', remaining: rateLimit.remaining, resetAt: rateLimit.resetAt }),
+  });
 }

@@ -23,6 +23,8 @@ const DEFAULT_POLICIES: Record<string, ActionBridgeRateLimitPolicy> = {
   setupSession: { name: 'setupSession', windowMs: 60_000, max: 30, scope: 'pilot_process_local' },
   bridgeHandshake: { name: 'bridgeHandshake', windowMs: 60_000, max: 20, scope: 'pilot_process_local' },
   domainVerification: { name: 'domainVerification', windowMs: 60_000, max: 20, scope: 'pilot_process_local' },
+  webhookDelivery: { name: 'webhookDelivery', windowMs: 60_000, max: 30, scope: 'pilot_process_local' },
+  webhookFailureQuarantine: { name: 'webhookFailureQuarantine', windowMs: 15 * 60_000, max: 5, scope: 'pilot_process_local' },
 };
 
 type Bucket = { count: number; resetAtMs: number };
@@ -128,6 +130,34 @@ export function enforceActionBridgeRateLimit(input: {
     request: input.request,
     policy: DEFAULT_POLICIES[input.policyName],
     discriminator: input.discriminator,
+  });
+}
+
+export function decideActionBridgeWebhookDeliveryThrottle(input: {
+  request: NextRequest;
+  tenantId: string;
+  connectorId: string;
+  actionName: string;
+  destinationOrigin: string;
+}): ActionBridgeRateLimitResult {
+  return enforceActionBridgeRateLimit({
+    request: input.request,
+    policyName: 'webhookDelivery',
+    discriminator: `${input.tenantId}|${input.connectorId}|${input.actionName}|${input.destinationOrigin}`,
+  });
+}
+
+export function recordActionBridgeWebhookFailureQuarantine(input: {
+  request: NextRequest;
+  tenantId: string;
+  connectorId: string;
+  actionName: string;
+  destinationOrigin: string;
+}): ActionBridgeRateLimitResult {
+  return enforceActionBridgeRateLimit({
+    request: input.request,
+    policyName: 'webhookFailureQuarantine',
+    discriminator: `${input.tenantId}|${input.connectorId}|${input.actionName}|${input.destinationOrigin}`,
   });
 }
 

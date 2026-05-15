@@ -183,7 +183,7 @@ if (!webhookDelivery.includes('form.submit') && !webhookDelivery.includes('Steal
 else fail('webhook delivery unsafe primitive', 'webhook delivery must not use browser/form submit or caller supplied target');
 if (executeRoute.includes('deliverActionBridgeWebhook') && executeRoute.includes("webhookConnector?.type === 'webhook'") && executeRoute.includes('webhookDecision.allowed')) pass('execute route gates webhook delivery behind connector type and network controls');
 else fail('execute route webhook gate', 'webhook delivery must be gated by connector type and network execution controls');
-for (const token of ['webhook_delivery_error', 'ACTIONBRIDGE_WEBHOOK_DELIVERY_FAILED', "if (!webhookResult.ok) finalExecutionStatus = 'failed'", "status: finalExecutionStatus", "finalExecutionStatus === 'failed' ? 502 : 200"]) {
+for (const token of ['webhook_delivery_error', 'ACTIONBRIDGE_WEBHOOK_DELIVERY_FAILED', 'decideActionBridgeWebhookDeliveryThrottle', 'webhook_rate_limited', 'recordActionBridgeWebhookFailureQuarantine', 'quarantine_required', "if (!webhookResult.ok)", "status: finalExecutionStatus", "finalExecutionStatus === 'failed' ? 502 : 200"]) {
   if (executeRoute.includes(token)) pass(`execute route webhook failure marker: ${token}`);
   else fail(`execute route webhook failure missing marker: ${token}`);
 }
@@ -202,7 +202,7 @@ if (bridgeHandshakeRoute.includes("update({ status: 'completed' })") && bridgeHa
 else fail('bridge handshake completion/audit gate', 'successful bridge handshakes must close setup replay and audit connection');
 
 const rateLimit = read('src/frontend/lib/actionbridge/rate-limit.ts');
-for (const token of ['ACTIONBRIDGE_RATE_LIMITED', 'Retry-After', 'setupSession', 'bridgeHandshake', 'domainVerification', 'keyDigest', 'ACTIONBRIDGE_RATE_LIMIT_MODE', 'pilot_process_local', 'ACTIONBRIDGE_PRODUCTION_RATE_LIMIT_REQUIREMENTS', 'trusted_proxy_header_policy', 'redacted_rate_limit_telemetry', 'MAX_PILOT_BUCKETS']) {
+for (const token of ['ACTIONBRIDGE_RATE_LIMITED', 'Retry-After', 'setupSession', 'bridgeHandshake', 'domainVerification', 'webhookDelivery', 'webhookFailureQuarantine', 'keyDigest', 'ACTIONBRIDGE_RATE_LIMIT_MODE', 'pilot_process_local', 'ACTIONBRIDGE_PRODUCTION_RATE_LIMIT_REQUIREMENTS', 'trusted_proxy_header_policy', 'redacted_rate_limit_telemetry', 'decideActionBridgeWebhookDeliveryThrottle', 'recordActionBridgeWebhookFailureQuarantine', 'MAX_PILOT_BUCKETS']) {
   if (rateLimit.includes(token)) pass(`rate-limit marker: ${token}`);
   else fail(`rate-limit missing marker: ${token}`);
 }
@@ -223,6 +223,8 @@ for (const [label, source, marker] of [
 ]) {
   if (source.includes('enforceActionBridgeRateLimit') && source.includes(marker)) pass(`route rate-limit marker: ${label}`);
   else fail(`missing route rate-limit marker: ${label}`);
+  if (source.includes('createActionBridgeRateLimitHeaders')) pass(`route success rate-limit headers: ${label}`);
+  else fail(`missing route success rate-limit headers: ${label}`);
 }
 
 for (const [label, source, marker] of [

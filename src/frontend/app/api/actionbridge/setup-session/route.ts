@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createCoreServiceClient } from '@/lib/core/service-client';
 import { createActionBridgeSetupSessionView, digestActionBridgeSetupSessionToken, isActionBridgeSetupSessionUsable } from '@/lib/actionbridge/setup-session';
-import { enforceActionBridgeRateLimit } from '@/lib/actionbridge/rate-limit';
+import { createActionBridgeRateLimitHeaders, enforceActionBridgeRateLimit } from '@/lib/actionbridge/rate-limit';
 
 function getToken(request: NextRequest): string {
   const url = new URL(request.url);
@@ -40,5 +40,7 @@ export async function GET(request: NextRequest) {
     record.status = 'opened';
   }
 
-  return NextResponse.json({ setupSession: createActionBridgeSetupSessionView(record) });
+  return NextResponse.json({ setupSession: createActionBridgeSetupSessionView(record) }, {
+    headers: createActionBridgeRateLimitHeaders({ policyName: 'setupSession', remaining: rateLimit.remaining, resetAt: rateLimit.resetAt }),
+  });
 }

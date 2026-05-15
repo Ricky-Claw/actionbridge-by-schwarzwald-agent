@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createCoreServiceClient } from '@/lib/core/service-client';
 import { parseActionBridgeBridgeHandshake } from '@/lib/actionbridge/bridge-handshake';
 import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
-import { enforceActionBridgeRateLimit } from '@/lib/actionbridge/rate-limit';
+import { createActionBridgeRateLimitHeaders, enforceActionBridgeRateLimit } from '@/lib/actionbridge/rate-limit';
 
 export async function POST(request: NextRequest) {
   const rateLimit = enforceActionBridgeRateLimit({ request, policyName: 'bridgeHandshake' });
@@ -85,5 +85,7 @@ export async function POST(request: NextRequest) {
       lastSeenAt: data.last_seen_at,
       mode: 'connected_only',
     },
+  }, {
+    headers: createActionBridgeRateLimitHeaders({ policyName: 'bridgeHandshake', remaining: rateLimit.remaining, resetAt: rateLimit.resetAt }),
   });
 }

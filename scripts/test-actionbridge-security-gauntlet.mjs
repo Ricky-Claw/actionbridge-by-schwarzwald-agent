@@ -180,8 +180,8 @@ for (const token of ['normalizeActionBridgeWebhookEndpointPath', 'body.endpointP
   if (webhookConnectorsRoute.includes(token) || webhookMigration.includes(token)) pass(`webhook endpoint path marker: ${token}`);
   else fail(`webhook endpoint path missing marker: ${token}`);
 }
-if (webhookConnectorsRoute.includes("startsWith('//')") && webhookConnectorsRoute.includes("split('?', 1)") && webhookConnectorsRoute.includes("split('#', 1)")) pass('webhook endpoint path strips query/hash and blocks absolute override');
-else fail('webhook endpoint path guard', 'endpoint path must be relative-only and strip query/hash before persistence');
+if (webhookConnectorsRoute.includes("startsWith('//')") && webhookConnectorsRoute.includes("candidate.includes('?')") && webhookConnectorsRoute.includes("candidate.includes('#')")) pass('webhook endpoint path rejects query/hash and blocks absolute override');
+else fail('webhook endpoint path guard', 'endpoint path must be relative-only and reject query/hash before persistence');
 
 const webhookDelivery = read('src/frontend/lib/actionbridge/webhook-delivery.ts');
 for (const token of ['deliverActionBridgeWebhook', 'postPinnedHttpsJson', 'pinnedAddress', 'servername: input.target.hostname', 'Host: input.target.host', 'decideActionBridgeDnsPinning', 'validateActionBridgeTarget', 'X-ActionBridge-Idempotency-Digest', 'X-ActionBridge-Signature']) {
@@ -288,3 +288,10 @@ for (const token of ['actionbridge_error_logs', 'ENABLE ROW LEVEL SECURITY', 'au
   if (errorMigration.includes(token)) pass(`error-log migration marker: ${token}`);
   else fail(`error-log migration missing marker: ${token}`);
 }
+
+
+// Strict endpoint path and atomic error status gates
+if (connectorsRoute.includes("candidate.includes('?')") && connectorsRoute.includes("candidate.includes('#')") && connectorsRoute.includes("path.includes('\\')")) pass('webhook endpoint path rejects query/hash/backslash instead of stripping');
+else fail('webhook endpoint path strict rejection missing', 'endpointPath must reject query/hash/backslash inputs fail-closed');
+if (errorsRoute.includes(".eq('status', currentStatus)") && errorsRoute.includes('ACTIONBRIDGE_ERROR_STATUS_UPDATE_FAILED')) pass('error status lifecycle update is compare-and-set guarded');
+else fail('error status lifecycle atomic guard missing', 'PATCH must update with current status predicate to prevent racing downgrades');

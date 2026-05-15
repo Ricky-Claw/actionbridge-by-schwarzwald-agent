@@ -2,7 +2,9 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { normalizeActionBridgeErrorCategory, normalizeActionBridgeErrorSeverity, toActionBridgeErrorLogView } from '@/lib/actionbridge/error-log';
+import { createCoreServiceClient } from '@/lib/core/service-client';
+import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
+import { normalizeActionBridgeErrorCategory, normalizeActionBridgeErrorSeverity, normalizeActionBridgeErrorStatus, toActionBridgeErrorLogView } from '@/lib/actionbridge/error-log';
 
 async function requireActionBridgeUser() {
   const supabase = await createClient();
@@ -46,4 +48,58 @@ export async function GET(request: NextRequest) {
     errorLogs: (data || []).map(toActionBridgeErrorLogView),
     filters: { category, severity, status: status || null },
   });
+}
+
+export async function PATCH(request: NextRequest) {
+  const { supabase, user, response } = await requireActionBridgeUser();
+  if (response) return response;
+
+  const body = await request.json().catch(() => ({}));
+  const errorId = typeof body.errorId === 'string' ? body.errorId.trim() : typeof body.id === 'string' ? body.id.trim() : '';
+  const nextStatus = normalizeActionBridgeErrorStatus(body.status);
+  if (!errorId || !nextStatus || nextStatus === 'open') {
+    return NextResponse.json({ error: 'INVALID_ACTIONBRIDGE_ERROR_STATUS_UPDATE' }, { status: 400 });
+  }
+
+  const { data: existing } = await (supabase as any)
+    .from('actionbridge_error_logs')
+    .select('id,status,category,severity,error_code,connector_id')
+    .eq('user_id', user!.id)
+    .eq('id', errorId)
+    .maybeSingle();
+  if (!existing) return NextResponse.json({ error: 'ACTIONBRIDGE_ERROR_LOG_NOT_FOUND' }, { status: 404 });
+
+  const currentStatus = existing.status;
+  const allowed = (currentStatus === 'open' && (nextStatus === 'acknowledged' || nextStatus === 'resolved'))
+    || (currentStatus === 'acknowledged' && nextStatus === 'resolved')
+    || currentStatus === nextStatus;
+  if (!allowed) return NextResponse.json({ error: 'ACTIONBRIDGE_ERROR_STATUS_TRANSITION_BLOCKED' }, { status: 409 });
+
+  const serviceSupabase = createCoreServiceClient();
+  if (!serviceSupabase) return NextResponse.json({ error: 'ACTIONBRIDGE_ERROR_STATUS_UPDATE_FAILED' }, { status: 503 });
+
+  const { data, error } = await (serviceSupabase as any)
+    .from('actionbridge_error_logs')
+    .update({
+      status: nextStatus,
+      resolved_at: nextStatus === 'resolved' ? new Date().toISOString() : null,
+    })
+    .eq('user_id', user!.id)
+    .eq('id', errorId)
+    .eq('status', currentStatus)
+    .select('id, connector_id, execution_id, approval_id, category, severity, error_code, message, redacted_context, status, created_at, resolved_at')
+    .single();
+
+  if (error || !data) return NextResponse.json({ error: 'ACTIONBRIDGE_ERROR_STATUS_UPDATE_FAILED' }, { status: 409 });
+
+  await persistActionBridgeControlAuditEvent(serviceSupabase, {
+    userId: user!.id,
+    connectorId: data.connector_id || null,
+    eventName: 'error_log.status_changed',
+    input: { errorId, previousStatus: currentStatus, nextStatus },
+    status: 'succeeded',
+    resultSummary: { errorId, category: data.category, severity: data.severity, errorCode: data.error_code, status: data.status },
+  });
+
+  return NextResponse.json({ errorLog: toActionBridgeErrorLogView(data) });
 }

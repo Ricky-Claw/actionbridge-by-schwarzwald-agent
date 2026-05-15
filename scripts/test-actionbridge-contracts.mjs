@@ -383,7 +383,7 @@ if (!process.exitCode) {
   for (const token of ['actionbridge_executions', ".eq('user_id', user!.id)", 'safe_result', 'sanitizeActionBridgeVisibilityResult(value)', 'ACTIONBRIDGE_EXECUTIONS_LIST_FAILED']) {
     if (!executionsRoute.includes(token)) fail(`executions route missing safe visibility token ${token}`);
   }
-  for (const token of ['actionbridge_error_logs', ".eq('user_id', user!.id)", 'toActionBridgeErrorLogView', 'normalizeActionBridgeErrorCategory', 'normalizeActionBridgeErrorSeverity', 'ACTIONBRIDGE_ERROR_LOG_LIST_FAILED']) {
+  for (const token of ['actionbridge_error_logs', ".eq('user_id', user!.id)", 'toActionBridgeErrorLogView', 'normalizeActionBridgeErrorCategory', 'normalizeActionBridgeErrorSeverity', 'normalizeActionBridgeErrorStatus', 'export async function PATCH', 'ACTIONBRIDGE_ERROR_LOG_LIST_FAILED', 'ACTIONBRIDGE_ERROR_STATUS_TRANSITION_BLOCKED', 'error_log.status_changed']) {
     if (!errorsRoute.includes(token)) fail(`errors route missing safe visibility token ${token}`);
   }
   if (auditRoute.includes('idempotency_key') || executionsRoute.includes('idempotency_key') || errorsRoute.includes('idempotency_key') || executionsRoute.includes('...result')) fail('visibility routes must not return raw idempotency keys or spread stored result JSON');
@@ -655,4 +655,27 @@ if (exists('src/frontend/app/actionbridge/failures/page.tsx')) {
     if (!failuresPage.includes(token)) fail(`failures page missing error-monitor token ${token}`);
   }
   if (!process.exitCode) pass('ActionBridge failure page documents real error monitor and safe debugging fields');
+}
+
+
+if (exists('src/frontend/lib/actionbridge/error-log.ts')) {
+  const errorLogHelper = read('src/frontend/lib/actionbridge/error-log.ts');
+  for (const token of ['sanitizeActionBridgeErrorContext', 'maxDepth', 'maxKeys', 'maxArrayItems', 'maxStringLength', '[circular]', '[max_depth_reached]', 'normalizeActionBridgeErrorStatus']) {
+    if (!errorLogHelper.includes(token)) fail(`error-log helper missing bounded context token ${token}`);
+  }
+  if (!process.exitCode) pass('ActionBridge error-log helper bounds/redacts error context and normalizes lifecycle status');
+}
+
+
+if (exists('src/frontend/app/api/actionbridge/connectors/route.ts')) {
+  const connectorsRouteForEndpoint = read('src/frontend/app/api/actionbridge/connectors/route.ts');
+  for (const token of ["candidate.includes('?')", "candidate.includes('#')", "path.includes('\\')"]) {
+    if (!connectorsRouteForEndpoint.includes(token)) fail(`endpointPath strict query/hash rejection missing ${token}`);
+  }
+  if (!process.exitCode) pass('ActionBridge webhook endpointPath rejects query/hash/backslash before storage');
+}
+if (exists('src/frontend/app/api/actionbridge/errors/route.ts')) {
+  const errorsRouteForLifecycle = read('src/frontend/app/api/actionbridge/errors/route.ts');
+  if (!errorsRouteForLifecycle.includes(".eq('status', currentStatus)")) fail('error status lifecycle update must be compare-and-set guarded');
+  if (!process.exitCode) pass('ActionBridge error status lifecycle update is compare-and-set guarded');
 }

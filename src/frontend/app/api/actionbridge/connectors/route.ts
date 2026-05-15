@@ -42,9 +42,8 @@ function normalizeActionBridgeWebhookEndpointPath(value: unknown): string | null
   const candidate = value.trim();
   if (!candidate) return '/';
   if (/^[a-z][a-z0-9+.-]*:/i.test(candidate) || candidate.startsWith('//')) return null;
-  const noHash = candidate.split('#', 1)[0] || '/';
-  const noQuery = noHash.split('?', 1)[0] || '/';
-  const path = noQuery.startsWith('/') ? noQuery : `/${noQuery}`;
+  if (candidate.includes('?') || candidate.includes('#')) return null;
+  const path = candidate.startsWith('/') ? candidate : `/${candidate}`;
   if (path.includes('\\')) return null;
   return path;
 }

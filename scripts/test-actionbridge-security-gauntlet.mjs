@@ -202,9 +202,14 @@ if (bridgeHandshakeRoute.includes("update({ status: 'completed' })") && bridgeHa
 else fail('bridge handshake completion/audit gate', 'successful bridge handshakes must close setup replay and audit connection');
 
 const rateLimit = read('src/frontend/lib/actionbridge/rate-limit.ts');
-for (const token of ['ACTIONBRIDGE_RATE_LIMITED', 'Retry-After', 'setupSession', 'bridgeHandshake', 'domainVerification', 'keyDigest']) {
+for (const token of ['ACTIONBRIDGE_RATE_LIMITED', 'Retry-After', 'setupSession', 'bridgeHandshake', 'domainVerification', 'keyDigest', 'ACTIONBRIDGE_RATE_LIMIT_MODE', 'pilot_process_local', 'ACTIONBRIDGE_PRODUCTION_RATE_LIMIT_REQUIREMENTS', 'trusted_proxy_header_policy', 'redacted_rate_limit_telemetry', 'MAX_PILOT_BUCKETS']) {
   if (rateLimit.includes(token)) pass(`rate-limit marker: ${token}`);
   else fail(`rate-limit missing marker: ${token}`);
+}
+const productionRateLimitSpec = read('docs/specs/actionbridge-production-rate-limits.md');
+for (const token of ['not a production distributed abuse-control boundary', 'Edge/CDN/WAF outer gate', 'Distributed app limiter', 'Webhook-v1 delivery attempts', 'Do not log raw IP', 'Trusted proxy header spoof test']) {
+  if (productionRateLimitSpec.includes(token)) pass(`production rate-limit spec marker: ${token}`);
+  else fail(`production rate-limit spec missing marker: ${token}`);
 }
 
 const setupLinksRoute = read('src/frontend/app/api/actionbridge/setup-links/route.ts');

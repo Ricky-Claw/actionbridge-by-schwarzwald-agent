@@ -24,11 +24,11 @@ Required proof:
 Marker tests are not enough for production.
 
 Required proof:
-- endpoint path rejection behavior;
-- webhook timeout/non-2xx persistence;
-- unresolved signing ref blocks before network;
-- error lifecycle race cannot downgrade state;
-- visibility routes never expose raw secrets.
+- [ ] endpoint path rejection behavior; _spec-model coverage added; production route/import coverage still required_
+- [ ] webhook timeout/non-2xx persistence; _spec-model coverage added; production route/persistence coverage still required_
+- [ ] unresolved signing ref blocks before network; _spec-model coverage added; spy/import coverage still required_
+- [ ] error lifecycle race cannot downgrade state;
+- [ ] visibility routes never expose raw secrets.
 
 ## Blocker 4 — Secret Management / Rotation
 Webhook HMAC supports server-side env-backed secret ref resolution, but production needs a real secret-store/rotation story.

@@ -5,9 +5,10 @@
   "description": "ActionBridge universal connector and execution-control layer for Schwarzwald-Agent.",
   "type": "module",
   "scripts": {
-    "test": "npm run test:contracts && npm run test:security && npm run test:dns-ip && npm run test:visibility-sanitizer && npm run test:demo-flow",
+    "test": "npm run test:contracts && npm run test:security && npm run test:behavioral-security && npm run test:dns-ip && npm run test:visibility-sanitizer && npm run test:demo-flow",
     "test:contracts": "node scripts/test-actionbridge-contracts.mjs",
     "test:security": "node scripts/test-actionbridge-security-gauntlet.mjs",
+    "test:behavioral-security": "node scripts/test-actionbridge-behavioral-security.mjs",
     "test:dns-ip": "node scripts/test-actionbridge-dns-ip-guard.mjs",
     "test:visibility-sanitizer": "node scripts/test-actionbridge-visibility-sanitizer.mjs",
     "test:demo-flow": "node scripts/test-actionbridge-demo-flow.mjs",

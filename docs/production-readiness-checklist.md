@@ -58,6 +58,8 @@ ActionBridge is suitable for controlled pilot continuation only. This checklist 
 - [x] Connector-only scope documented.
 - [x] No CRM/lead inbox/product drift.
 - [x] Schwarzwald-Agent integration explicitly delayed until standalone DoD.
+- [x] Embedded setup-plugin UX boundary documented.
+- [ ] Embedded setup wizard UI implemented.
 - [ ] Standalone setup UX consumes real API state instead of explanatory static pages.
 - [ ] Operator-facing smoke runbook for pilot.
 

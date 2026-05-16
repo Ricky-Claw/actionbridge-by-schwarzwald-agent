@@ -723,6 +723,14 @@ for (const [file, tokens, label] of [
 }
 
 
+if (exists('docs/specs/actionbridge-embedded-setup-plugin.md')) {
+  const embeddedSpec = read('docs/specs/actionbridge-embedded-setup-plugin.md');
+  for (const token of ['Embedded Setup Plugin', 'not a standalone dashboard', 'Host Theme Tokens', 'Customer Wizard', 'Operator Surface', 'No raw secrets']) {
+    if (!embeddedSpec.includes(token)) fail(`embedded setup plugin spec missing ${token}`);
+  }
+  if (!process.exitCode) pass('Embedded setup plugin spec documents UX boundary');
+} else fail('Missing embedded setup plugin spec');
+
 if (exists('src/frontend/lib/actionbridge/embedded-setup-ux.ts')) {
   const embeddedUx = read('src/frontend/lib/actionbridge/embedded-setup-ux.ts');
   for (const token of [

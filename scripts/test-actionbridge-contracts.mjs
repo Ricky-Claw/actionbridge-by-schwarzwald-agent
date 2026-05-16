@@ -741,3 +741,32 @@ if (exists('docs/actionbridge-work-batch-2026-05-15-signing-readiness.md')) {
   }
   if (!process.exitCode) pass('Work batch document records autonomous hardening tasks');
 }
+
+
+
+for (const [file, tokens, label] of [
+  ['src/frontend/lib/actionbridge/webhook-quarantine.ts', ['getActiveActionBridgeConnectorQuarantine', 'persistActionBridgeWebhookFailureQuarantine', 'redactActionBridgeValue', 'webhook_repeated_failures'], 'ActionBridge webhook quarantine helper provides durable redacted pause state'],
+  ['supabase/migrations/20260516011500_actionbridge_connector_quarantine.sql', ['actionbridge_connector_quarantine', 'webhook_repeated_failures', 'idx_actionbridge_connector_quarantine_one_active', 'ENABLE ROW LEVEL SECURITY'], 'ActionBridge connector quarantine migration defines durable owner-scoped pause state'],
+]) {
+  if (!exists(file)) fail(`Missing ${file}`);
+  else {
+    const source = read(file);
+    for (const token of tokens) if (!source.includes(token)) fail(`${file} missing ${token}`);
+    if (!process.exitCode) pass(label);
+  }
+}
+
+if (exists('package.json')) {
+  const packageJson = read('package.json');
+  for (const token of ['test:behavioral-security', 'test:behavioral-modules', 'test-actionbridge-behavioral-modules.mjs']) {
+    if (!packageJson.includes(token)) fail(`package.json missing behavioral module gate ${token}`);
+  }
+  if (!process.exitCode) pass('Package test script includes behavioral module gate');
+}
+if (exists('scripts/test-actionbridge-behavioral-modules.mjs')) {
+  const behavioralModules = read('scripts/test-actionbridge-behavioral-modules.mjs');
+  for (const token of ['extractFunction', 'normalizeActionBridgeWebhookEndpointPath', 'query rejected fail-closed', 'backslash rejected fail-closed', 'compare-and-set status predicate']) {
+    if (!behavioralModules.includes(token)) fail(`behavioral module test missing ${token}`);
+  }
+  if (!process.exitCode) pass('Behavioral module test executes real source-level guard seams');
+}

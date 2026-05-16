@@ -12,11 +12,11 @@ Required proof:
 - tenant/connector/action/token dimensions.
 
 ## Blocker 2 — Durable Quarantine / Pause
-Current webhook failure quarantine is a pilot signal only. Production needs durable connector pause/quarantine state.
+Initial durable connector quarantine primitive exists: `actionbridge_connector_quarantine`, `webhook-quarantine.ts`, and execute-route pre-delivery blocking for active webhook quarantine.
 
-Required proof:
-- repeated failures persist quarantine state;
-- quarantined connector cannot deliver;
+Still required proof before production:
+- route/integration test proves repeated failures persist quarantine state;
+- route/integration test proves quarantined connector cannot deliver;
 - operator can review/resolve with audit;
 - customer-visible reason is safe and redacted.
 

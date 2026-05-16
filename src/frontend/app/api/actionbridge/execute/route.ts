@@ -19,6 +19,7 @@ import { deliverActionBridgeWebhook } from '@/lib/actionbridge/webhook-delivery'
 import { resolveActionBridgeWebhookSigningSecret } from '@/lib/actionbridge/webhook-signing';
 import { decideActionBridgeWebhookDeliveryThrottle, recordActionBridgeWebhookFailureQuarantine } from '@/lib/actionbridge/rate-limit';
 import { persistActionBridgeErrorEvent } from '@/lib/actionbridge/error-log';
+import { getActiveActionBridgeConnectorQuarantine, persistActionBridgeWebhookFailureQuarantine } from '@/lib/actionbridge/webhook-quarantine';
 
 async function requireActionBridgeUser() {
   const supabase = await createClient();
@@ -158,59 +159,99 @@ export async function POST(request: NextRequest) {
           const webhookDestinationOrigin = (() => {
             try { return new URL(webhookConnector.base_url).origin; } catch { return 'invalid-origin'; }
           })();
-          const signingResolution = resolveActionBridgeWebhookSigningSecret({
+          const activeQuarantine = await getActiveActionBridgeConnectorQuarantine(serviceSupabase, {
+            userId: user!.id,
             connectorId: webhookConnector.id,
-            signingMode: webhookConnector.webhook_signing_mode === 'hmac_sha256' ? 'hmac_sha256' : 'unsigned_pilot',
-            secretRef: webhookConnector.secret_ref,
-          });
-          const webhookThrottle = decideActionBridgeWebhookDeliveryThrottle({
-            request,
-            tenantId: user!.id,
-            connectorId: webhookConnector.id,
-            actionName: consumed.execution.actionName,
-            destinationOrigin: webhookDestinationOrigin,
           });
           try {
-            if (!signingResolution.ok) {
+            if (activeQuarantine.error) {
+              await persistActionBridgeErrorEvent(serviceSupabase, {
+                userId: user!.id,
+                connectorId: webhookConnector.id,
+                executionId,
+                approvalId: consumed.execution.approvalId,
+                category: 'system',
+                severity: 'high',
+                errorCode: 'ACTIONBRIDGE_CONNECTOR_QUARANTINE_LOOKUP_FAILED',
+                message: 'Webhook-v1 delivery was blocked because durable connector quarantine state could not be verified.',
+                context: { destinationOrigin: webhookDestinationOrigin, actionName: consumed.execution.actionName, quarantineError: activeQuarantine.error },
+              });
               webhookResult = {
                 ok: false,
                 status: 503,
                 networkExecution: false,
                 resultSummary: {
-                  status: 'webhook_signing_secret_unresolved',
-                  reason: 'Webhook signing secret reference is configured but unavailable server-side.',
-                  signing: signingResolution.resultSummary,
+                  status: 'webhook_quarantine_lookup_failed',
+                  reason: 'Connector delivery is blocked because ActionBridge could not verify durable quarantine state.',
                   networkExecution: false,
                 },
               };
-            } else if (!webhookThrottle.ok) {
+            } else if (activeQuarantine.quarantined) {
               webhookResult = {
                 ok: false,
-                status: 429,
+                status: 423,
                 networkExecution: false,
                 resultSummary: {
-                  status: 'webhook_rate_limited',
-                  reason: 'Webhook-v1 pilot delivery throttle blocked this attempt.',
-                  rateLimit: { policy: 'webhookDelivery', keyDigest: webhookThrottle.keyDigest, resetAt: webhookThrottle.resetAt, retryAfterSeconds: webhookThrottle.retryAfterSeconds },
+                  status: 'webhook_connector_quarantined',
+                  reason: 'Connector delivery is paused by durable ActionBridge quarantine state.',
+                  quarantine: activeQuarantine.quarantine,
                   networkExecution: false,
                 },
               };
             } else {
-              webhookResult = await deliverActionBridgeWebhook({
-                connector: { id: webhookConnector.id, baseUrl: webhookConnector.base_url, enabled: webhookConnector.enabled === true },
-                action: { id: consumed.execution.actionId, name: consumed.execution.actionName, riskLevel: consumed.execution.riskLevel },
-                approval: { id: consumed.execution.approvalId, idempotencyKeyDigest: summarizeIdempotencyKey(consumed.execution.idempotencyKey) },
-                tenantId: user!.id,
-                executionId,
-                payload: { leadSubmission: leadSubmission.safeResult },
-                path: typeof webhookConnector.endpoint_path === 'string' ? webhookConnector.endpoint_path : '/',
-                allowlist: parseServerActionBridgeAllowlist(webhookConnector.allowed_origins),
-                signingSecret: signingResolution.signingSecret,
+              const signingResolution = resolveActionBridgeWebhookSigningSecret({
+                connectorId: webhookConnector.id,
+                signingMode: webhookConnector.webhook_signing_mode === 'hmac_sha256' ? 'hmac_sha256' : 'unsigned_pilot',
+                secretRef: webhookConnector.secret_ref,
               });
-              webhookResult.resultSummary = {
-                ...webhookResult.resultSummary,
-                signing: signingResolution.resultSummary,
-              };
+              const webhookThrottle = decideActionBridgeWebhookDeliveryThrottle({
+                request,
+                tenantId: user!.id,
+                connectorId: webhookConnector.id,
+                actionName: consumed.execution.actionName,
+                destinationOrigin: webhookDestinationOrigin,
+              });
+              if (!signingResolution.ok) {
+                webhookResult = {
+                  ok: false,
+                  status: 503,
+                  networkExecution: false,
+                  resultSummary: {
+                    status: 'webhook_signing_secret_unresolved',
+                    reason: 'Webhook signing secret reference is configured but unavailable server-side.',
+                    signing: signingResolution.resultSummary,
+                    networkExecution: false,
+                  },
+                };
+              } else if (!webhookThrottle.ok) {
+                webhookResult = {
+                  ok: false,
+                  status: 429,
+                  networkExecution: false,
+                  resultSummary: {
+                    status: 'webhook_rate_limited',
+                    reason: 'Webhook-v1 pilot delivery throttle blocked this attempt.',
+                    rateLimit: { policy: 'webhookDelivery', keyDigest: webhookThrottle.keyDigest, resetAt: webhookThrottle.resetAt, retryAfterSeconds: webhookThrottle.retryAfterSeconds },
+                    networkExecution: false,
+                  },
+                };
+              } else {
+                webhookResult = await deliverActionBridgeWebhook({
+                  connector: { id: webhookConnector.id, baseUrl: webhookConnector.base_url, enabled: webhookConnector.enabled === true },
+                  action: { id: consumed.execution.actionId, name: consumed.execution.actionName, riskLevel: consumed.execution.riskLevel },
+                  approval: { id: consumed.execution.approvalId, idempotencyKeyDigest: summarizeIdempotencyKey(consumed.execution.idempotencyKey) },
+                  tenantId: user!.id,
+                  executionId,
+                  payload: { leadSubmission: leadSubmission.safeResult },
+                  path: typeof webhookConnector.endpoint_path === 'string' ? webhookConnector.endpoint_path : '/',
+                  allowlist: parseServerActionBridgeAllowlist(webhookConnector.allowed_origins),
+                  signingSecret: signingResolution.signingSecret,
+                });
+                webhookResult.resultSummary = {
+                  ...webhookResult.resultSummary,
+                  signing: signingResolution.resultSummary,
+                };
+              }
             }
           } catch (error) {
             webhookResult = {
@@ -248,6 +289,31 @@ export async function POST(request: NextRequest) {
               actionName: consumed.execution.actionName,
               destinationOrigin: webhookDestinationOrigin,
             });
+            let durableQuarantine = null;
+            let durablePersistenceStatus: 'not_required' | 'persisted' | 'failed' = 'not_required';
+            if (!quarantine.ok) {
+              const persistedQuarantine = await persistActionBridgeWebhookFailureQuarantine(serviceSupabase, {
+                userId: user!.id,
+                connectorId: webhookConnector.id,
+                failureCount: 6,
+                context: { webhook: webhookResult.resultSummary, destinationOrigin: webhookDestinationOrigin, actionName: consumed.execution.actionName },
+              });
+              durableQuarantine = persistedQuarantine.quarantine;
+              durablePersistenceStatus = persistedQuarantine.ok ? 'persisted' : 'failed';
+              if (!persistedQuarantine.ok) {
+                await persistActionBridgeErrorEvent(serviceSupabase, {
+                  userId: user!.id,
+                  connectorId: webhookConnector.id,
+                  executionId,
+                  approvalId: consumed.execution.approvalId,
+                  category: 'system',
+                  severity: 'high',
+                  errorCode: 'ACTIONBRIDGE_CONNECTOR_QUARANTINE_PERSIST_FAILED',
+                  message: 'Webhook-v1 repeated-failure quarantine was required but durable pause state could not be persisted.',
+                  context: { destinationOrigin: webhookDestinationOrigin, actionName: consumed.execution.actionName, persistenceError: persistedQuarantine.error },
+                });
+              }
+            }
             webhookResult.resultSummary = {
               ...webhookResult.resultSummary,
               quarantine: {
@@ -255,6 +321,8 @@ export async function POST(request: NextRequest) {
                 status: quarantine.ok ? 'recorded' : 'quarantine_required',
                 keyDigest: quarantine.keyDigest,
                 resetAt: quarantine.resetAt,
+                durablePersistenceStatus,
+                durable: durableQuarantine,
               },
             };
           }

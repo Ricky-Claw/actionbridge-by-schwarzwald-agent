@@ -3,6 +3,13 @@
 ## Why
 Current gates are strong contract/security marker tests, but production needs behavioral tests that execute failure branches and race conditions. This roadmap converts Sentinel residual notes into concrete test targets.
 
+## Current Added Gate
+`npm test` now includes:
+- `test:behavioral-security`: spec-model checks for endpoint paths, signing modes, and failure persistence semantics.
+- `test:behavioral-modules`: extracts and executes importable/source-level ActionBridge seams where build metadata is unavailable, starting with real `normalizeActionBridgeWebhookEndpointPath(...)` behavior from the connector route.
+
+These gates improve coverage but do not replace full route/integration tests.
+
 ## Priority 1 — Webhook Endpoint Path
 Behavioral cases:
 - `/hook` accepted.
@@ -14,6 +21,7 @@ Behavioral cases:
 - `/safe\\evil` rejected.
 
 Expected proof:
+- connector route path normalizer rejects unsafe paths; **covered by `test:behavioral-modules`**;
 - connector creation returns 400 for rejected paths;
 - DB constraint rejects unsafe paths as defense-in-depth;
 - execute route never reads caller-supplied body path for webhook delivery.
@@ -40,7 +48,7 @@ Behavioral cases:
 - concurrent stale update with previous `open` fails after row is already resolved.
 
 Expected proof:
-- compare-and-set predicate prevents downgrade;
+- compare-and-set predicate prevents downgrade; **source-level guarded by `test:behavioral-modules`**;
 - control audit event written only for accepted transitions.
 
 ## Priority 4 — Rate Limits / Quarantine

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import vm from 'node:vm';
 
 const root = process.cwd();
 const source = fs.readFileSync(path.join(root, 'src/frontend/app/api/actionbridge/visibility-sanitizer.ts'), 'utf8');
@@ -21,6 +22,36 @@ for (const token of ['SAFE_RESULT_KEYS', 'SENSITIVE_KEY_PATTERN', 'sanitizeActio
 for (const key of ['idempotency', 'secret', 'token', 'password', 'authorization', 'credential', 'api[-_]?', 'client[-_]?secret']) {
   if (!source.includes(key)) fail(`visibility sanitizer sensitive pattern missing ${key}`);
 }
+
+const sanitizerRuntimeSource = source
+  .replace(/export function sanitizeActionBridgeVisibilityResult/, 'function sanitizeActionBridgeVisibilityResult')
+  .replace(/function sanitizeNestedSafeMetadata\(value: unknown\): unknown/, 'function sanitizeNestedSafeMetadata(value)')
+  .replace(/function sanitizeActionBridgeVisibilityResult\(value: unknown\): Record<string, unknown>/, 'function sanitizeActionBridgeVisibilityResult(value)')
+  .replace(/const sanitized: Record<string, unknown> = \{\};/g, 'const sanitized = {};')
+  .replace(/const sanitized: Record<string, unknown> = \{ networkExecution: false \};/g, 'const sanitized = { networkExecution: false };')
+  .replace(/value as Record<string, unknown>/g, 'value');
+const sanitizerContext = {};
+vm.createContext(sanitizerContext);
+vm.runInContext(`${sanitizerRuntimeSource}; globalThis.__sanitize = sanitizeActionBridgeVisibilityResult;`, sanitizerContext);
+const runtimeResult = sanitizerContext.__sanitize({
+  status: 'blocked',
+  networkExecution: true,
+  token: 'raw-token',
+  secretRef: 'sec_live_ref',
+  responseLimits: {
+    maxBytes: 4096,
+    authorization: 'Bearer leaked',
+    nested: { apiKey: 'raw-key', safeCounter: 1 },
+  },
+  executionControls: [{ mode: 'approval', clientSecret: 'hidden', reason: 'safe' }],
+});
+const runtimeJson = JSON.stringify(runtimeResult);
+for (const leaked of ['raw-token', 'sec_live_ref', 'Bearer leaked', 'raw-key', 'hidden']) {
+  if (runtimeJson.includes(leaked)) fail(`visibility sanitizer runtime leaked sensitive value ${leaked}`);
+}
+if (runtimeResult.networkExecution !== false) fail('visibility sanitizer must force networkExecution false for stored visibility views');
+if (runtimeResult.status !== 'blocked') fail('visibility sanitizer must preserve allowlisted status');
+if (!runtimeJson.includes('safeCounter') || !runtimeJson.includes('approval')) fail('visibility sanitizer must preserve non-sensitive nested metadata');
 
 const auditRoute = fs.readFileSync(path.join(root, 'src/frontend/app/api/actionbridge/audit/route.ts'), 'utf8');
 const executionsRoute = fs.readFileSync(path.join(root, 'src/frontend/app/api/actionbridge/executions/route.ts'), 'utf8');

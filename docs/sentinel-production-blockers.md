@@ -29,7 +29,7 @@ Required proof:
 - [ ] webhook timeout/non-2xx persistence; _spec-model coverage added; production route/persistence coverage still required_
 - [x] unresolved signing ref blocks before network; _spec-model plus execute-route source-order proof added: unresolved signing blocks before throttle/delivery branch_
 - [ ] error lifecycle race cannot downgrade state;
-- [ ] visibility routes never expose raw secrets.
+- [x] visibility routes never expose raw secrets. _Runtime sanitizer proof now covers nested sensitive values plus audit/execution route sanitizer usage._
 
 ## Blocker 4 — Secret Management / Rotation
 Webhook HMAC supports server-side env-backed secret ref resolution, and the pilot env bootstrap/rotation story is documented in `docs/specs/actionbridge-webhook-secret-bootstrap-rotation.md`. Production still needs a real secret-store/KMS implementation and operational rotation controls.

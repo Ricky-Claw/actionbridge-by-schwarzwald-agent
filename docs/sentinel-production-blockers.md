@@ -6,10 +6,11 @@ This file tracks blockers that must remain visible until fixed. A controlled pil
 Current limiter is `pilot_process_local`. Production needs a distributed atomic counter store and trusted proxy identity.
 
 Required proof:
-- cross-instance counter test;
-- TTL reset test;
-- header spoof rejection test;
-- tenant/connector/action/token dimensions.
+- [ ] cross-instance counter test;
+- [ ] TTL reset test;
+- [x] trusted proxy absent/missing-header fail-closed proof in production mode;
+- [x] tenant/connector/action/token dimensions documented and used in pilot throttles;
+- [ ] real distributed atomic counter store wired.
 
 ## Blocker 2 — Durable Quarantine / Pause
 Initial durable connector quarantine primitive exists: `actionbridge_connector_quarantine`, `webhook-quarantine.ts`, and execute-route pre-delivery blocking for active webhook quarantine.

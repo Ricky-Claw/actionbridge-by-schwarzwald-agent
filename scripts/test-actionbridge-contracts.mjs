@@ -251,7 +251,7 @@ if (!process.exitCode) {
   if (!process.exitCode) pass('ActionBridge response limit contract is defined');
 
   const rateLimit = read('src/frontend/lib/actionbridge/rate-limit.ts');
-  for (const token of ['enforceActionBridgeRateLimit', 'ACTIONBRIDGE_RATE_LIMITED', 'Retry-After', 'setupSession', 'bridgeHandshake', 'domainVerification', 'webhookDelivery', 'webhookFailureQuarantine', 'keyDigest', 'ACTIONBRIDGE_RATE_LIMIT_MODE', 'pilot_process_local', 'ACTIONBRIDGE_PRODUCTION_RATE_LIMIT_REQUIREMENTS', 'createActionBridgeRateLimitHeaders', 'decideActionBridgeWebhookDeliveryThrottle', 'recordActionBridgeWebhookFailureQuarantine', 'MAX_PILOT_BUCKETS']) {
+  for (const token of ['enforceActionBridgeRateLimit', 'ACTIONBRIDGE_RATE_LIMITED', 'ACTIONBRIDGE_TRUSTED_PROXY_REQUIRED', 'ACTIONBRIDGE_TRUSTED_PROXY_HEADER', 'getActionBridgeTrustedClientIdentity', 'production_distributed_required', 'Retry-After', 'setupSession', 'bridgeHandshake', 'domainVerification', 'webhookDelivery', 'webhookFailureQuarantine', 'keyDigest', 'ACTIONBRIDGE_RATE_LIMIT_MODE', 'pilot_process_local', 'ACTIONBRIDGE_PRODUCTION_RATE_LIMIT_REQUIREMENTS', 'createActionBridgeRateLimitHeaders', 'decideActionBridgeWebhookDeliveryThrottle', 'recordActionBridgeWebhookFailureQuarantine', 'MAX_PILOT_BUCKETS']) {
     if (!rateLimit.includes(token)) fail(`rate-limit.ts missing ${token}`);
   }
   if (!process.exitCode) pass('ActionBridge rate limit contract protects public/token-adjacent endpoints');

@@ -31,7 +31,7 @@ ActionBridge is suitable for controlled pilot continuation only. This checklist 
 - [x] Pilot webhook failure quarantine signal.
 - [x] Success and denial rate-limit headers for token-adjacent routes.
 - [ ] Distributed atomic rate limiter.
-- [ ] Trusted proxy/header enforcement.
+- [x] Trusted proxy/header fail-closed enforcement for production mode.
 - [ ] Durable connector pause/quarantine.
 - [ ] Cross-instance/concurrency tests.
 

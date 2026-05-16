@@ -219,7 +219,7 @@ if (bridgeHandshakeRoute.includes("update({ status: 'completed' })") && bridgeHa
 else fail('bridge handshake completion/audit gate', 'successful bridge handshakes must close setup replay and audit connection');
 
 const rateLimit = read('src/frontend/lib/actionbridge/rate-limit.ts');
-for (const token of ['ACTIONBRIDGE_RATE_LIMITED', 'Retry-After', 'setupSession', 'bridgeHandshake', 'domainVerification', 'webhookDelivery', 'webhookFailureQuarantine', 'keyDigest', 'ACTIONBRIDGE_RATE_LIMIT_MODE', 'pilot_process_local', 'ACTIONBRIDGE_PRODUCTION_RATE_LIMIT_REQUIREMENTS', 'trusted_proxy_header_policy', 'redacted_rate_limit_telemetry', 'decideActionBridgeWebhookDeliveryThrottle', 'recordActionBridgeWebhookFailureQuarantine', 'MAX_PILOT_BUCKETS']) {
+for (const token of ['ACTIONBRIDGE_RATE_LIMITED', 'ACTIONBRIDGE_TRUSTED_PROXY_REQUIRED', 'ACTIONBRIDGE_TRUSTED_PROXY_HEADER', 'getActionBridgeTrustedClientIdentity', 'production_distributed_required', 'Retry-After', 'setupSession', 'bridgeHandshake', 'domainVerification', 'webhookDelivery', 'webhookFailureQuarantine', 'keyDigest', 'ACTIONBRIDGE_RATE_LIMIT_MODE', 'pilot_process_local', 'ACTIONBRIDGE_PRODUCTION_RATE_LIMIT_REQUIREMENTS', 'trusted_proxy_header_policy', 'redacted_rate_limit_telemetry', 'decideActionBridgeWebhookDeliveryThrottle', 'recordActionBridgeWebhookFailureQuarantine', 'MAX_PILOT_BUCKETS']) {
   if (rateLimit.includes(token)) pass(`rate-limit marker: ${token}`);
   else fail(`rate-limit missing marker: ${token}`);
 }

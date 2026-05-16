@@ -33,7 +33,17 @@ const buckets = globalBuckets.__actionBridgeRateLimitBuckets || new Map<string, 
 globalBuckets.__actionBridgeRateLimitBuckets = buckets;
 const MAX_PILOT_BUCKETS = 10_000;
 
-export const ACTIONBRIDGE_RATE_LIMIT_MODE = 'pilot_process_local';
+export const ACTIONBRIDGE_RATE_LIMIT_MODE = process.env.ACTIONBRIDGE_RATE_LIMIT_MODE === 'production_distributed'
+  ? 'production_distributed_required'
+  : 'pilot_process_local';
+
+export const ACTIONBRIDGE_TRUSTED_PROXY_HEADER = process.env.ACTIONBRIDGE_TRUSTED_PROXY_HEADER === 'x-vercel-forwarded-for'
+  ? 'x-vercel-forwarded-for'
+  : process.env.ACTIONBRIDGE_TRUSTED_PROXY_HEADER === 'cf-connecting-ip'
+    ? 'cf-connecting-ip'
+    : process.env.ACTIONBRIDGE_TRUSTED_PROXY_HEADER === 'x-real-ip'
+      ? 'x-real-ip'
+      : 'none';
 
 export const ACTIONBRIDGE_PRODUCTION_RATE_LIMIT_REQUIREMENTS = [
   'distributed_atomic_counter_store',
@@ -47,11 +57,21 @@ function digestKey(value: string): string {
   return `sha256:${createHash('sha256').update(value).digest('hex').slice(0, 16)}`;
 }
 
-function clientKey(request: NextRequest): string {
-  const forwardedFor = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  const realIp = request.headers.get('x-real-ip')?.trim();
+export function getActionBridgeTrustedClientIdentity(request: NextRequest): {
+  trusted: boolean;
+  source: typeof ACTIONBRIDGE_TRUSTED_PROXY_HEADER;
+  client: string;
+} {
   const userAgent = request.headers.get('user-agent')?.slice(0, 120) || 'unknown-agent';
-  return `${forwardedFor || realIp || 'unknown-ip'}|${userAgent}`;
+  if (ACTIONBRIDGE_TRUSTED_PROXY_HEADER === 'none') return { trusted: false, source: 'none', client: `untrusted-proxy|${userAgent}` };
+  const headerValue = request.headers.get(ACTIONBRIDGE_TRUSTED_PROXY_HEADER)?.split(',')[0]?.trim();
+  if (!headerValue) return { trusted: false, source: ACTIONBRIDGE_TRUSTED_PROXY_HEADER, client: `missing-trusted-client|${userAgent}` };
+  return { trusted: true, source: ACTIONBRIDGE_TRUSTED_PROXY_HEADER, client: `${headerValue}|${userAgent}` };
+}
+
+function clientKey(request: NextRequest): string {
+  const identity = getActionBridgeTrustedClientIdentity(request);
+  return identity.client;
 }
 
 function cleanupExpiredPilotBuckets(nowMs: number) {
@@ -79,6 +99,7 @@ export function decideActionBridgeRateLimit(input: {
 }): ActionBridgeRateLimitResult {
   const nowMs = input.nowMs ?? Date.now();
   cleanupExpiredPilotBuckets(nowMs);
+  const identity = getActionBridgeTrustedClientIdentity(input.request);
   const rawKey = `${input.policy.name}|${clientKey(input.request)}|${input.discriminator || ''}`;
   const keyDigest = digestKey(rawKey);
   const bucketKey = `${input.policy.name}:${keyDigest}`;
@@ -92,6 +113,32 @@ export function decideActionBridgeRateLimit(input: {
 
   const resetAt = new Date(bucket.resetAtMs).toISOString();
   const remaining = Math.max(0, input.policy.max - bucket.count);
+  if (ACTIONBRIDGE_RATE_LIMIT_MODE === 'production_distributed_required' && !identity.trusted) {
+    return {
+      ok: false,
+      keyDigest,
+      remaining: 0,
+      resetAt,
+      retryAfterSeconds: 60,
+      response: NextResponse.json({
+        error: 'ACTIONBRIDGE_TRUSTED_PROXY_REQUIRED',
+        rateLimit: {
+          policy: input.policy.name,
+          keyDigest,
+          retryAfterSeconds: 60,
+          resetAt,
+          trustedProxyHeader: ACTIONBRIDGE_TRUSTED_PROXY_HEADER,
+        },
+      }, {
+        status: 503,
+        headers: {
+          'Retry-After': '60',
+          ...createActionBridgeRateLimitHeaders({ policyName: input.policy.name, remaining: 0, resetAt }),
+        },
+      }),
+    };
+  }
+
   if (bucket.count <= input.policy.max) {
     return { ok: true, keyDigest, remaining, resetAt };
   }

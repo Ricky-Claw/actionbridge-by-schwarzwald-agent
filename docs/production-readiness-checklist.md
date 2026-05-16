@@ -22,7 +22,7 @@ ActionBridge is suitable for controlled pilot continuation only. This checklist 
 - [x] Unresolved signing ref blocks before network.
 - [ ] Real secret manager integration or documented env-secret bootstrap for pilot operations.
 - [ ] Rotation story for webhook signing secrets.
-- [ ] Receiver verification guide for `X-ActionBridge-Signature`.
+- [x] Receiver verification guide for `X-ActionBridge-Signature`.
 
 ## Gate 3 — Abuse Controls
 - [x] Pilot process-local rate limiter.

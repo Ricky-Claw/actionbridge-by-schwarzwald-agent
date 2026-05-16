@@ -705,6 +705,7 @@ for (const [file, tokens, label] of [
 
 for (const [file, tokens, label] of [
   ['docs/pilot-smoke-test-runbook.md', ['Pilot Smoke Test Runbook', 'Smoke Flow', 'Pass Criteria', 'Stop Criteria', 'No raw secrets', 'unresolved signing secret ref'], 'Pilot smoke test runbook defines safe standalone pilot verification'],
+  ['docs/webhook-signature-receiver-guide.md', ['Webhook-v1 Signature Receiver Guide', 'X-ActionBridge-Signature', 'X-ActionBridge-Timestamp', '<timestamp>.<raw JSON body>', 'timingSafeEqual', 'idempotency', 'Never send the shared secret'], 'Webhook-v1 receiver guide documents signature verification and secret handling'],
   ['docs/sentinel-production-blockers.md', ['Distributed Rate Limiting', 'Durable Quarantine', 'Behavioral Security Tests', 'Secret Management / Rotation', 'Build/Typecheck/Lint Metadata', 'Operational Retention'], 'Sentinel production blockers remain explicit'],
 ]) {
   if (!exists(file)) fail(`Missing ${file}`);

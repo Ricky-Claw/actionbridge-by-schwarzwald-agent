@@ -26,7 +26,7 @@ Marker tests are not enough for production.
 Required proof:
 - [ ] endpoint path rejection behavior; _spec-model coverage added; production route/import coverage still required_
 - [ ] webhook timeout/non-2xx persistence; _spec-model coverage added; production route/persistence coverage still required_
-- [ ] unresolved signing ref blocks before network; _spec-model coverage added; spy/import coverage still required_
+- [x] unresolved signing ref blocks before network; _spec-model plus execute-route source-order proof added: unresolved signing blocks before throttle/delivery branch_
 - [ ] error lifecycle race cannot downgrade state;
 - [ ] visibility routes never expose raw secrets.
 

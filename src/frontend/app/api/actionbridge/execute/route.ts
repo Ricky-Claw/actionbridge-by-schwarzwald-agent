@@ -204,13 +204,6 @@ export async function POST(request: NextRequest) {
                 signingMode: webhookConnector.webhook_signing_mode === 'hmac_sha256' ? 'hmac_sha256' : 'unsigned_pilot',
                 secretRef: webhookConnector.secret_ref,
               });
-              const webhookThrottle = decideActionBridgeWebhookDeliveryThrottle({
-                request,
-                tenantId: user!.id,
-                connectorId: webhookConnector.id,
-                actionName: consumed.execution.actionName,
-                destinationOrigin: webhookDestinationOrigin,
-              });
               if (!signingResolution.ok) {
                 webhookResult = {
                   ok: false,
@@ -223,7 +216,15 @@ export async function POST(request: NextRequest) {
                     networkExecution: false,
                   },
                 };
-              } else if (!webhookThrottle.ok) {
+              } else {
+                const webhookThrottle = decideActionBridgeWebhookDeliveryThrottle({
+                  request,
+                  tenantId: user!.id,
+                  connectorId: webhookConnector.id,
+                  actionName: consumed.execution.actionName,
+                  destinationOrigin: webhookDestinationOrigin,
+                });
+                if (!webhookThrottle.ok) {
                 webhookResult = {
                   ok: false,
                   status: 429,
@@ -235,22 +236,23 @@ export async function POST(request: NextRequest) {
                     networkExecution: false,
                   },
                 };
-              } else {
-                webhookResult = await deliverActionBridgeWebhook({
-                  connector: { id: webhookConnector.id, baseUrl: webhookConnector.base_url, enabled: webhookConnector.enabled === true },
-                  action: { id: consumed.execution.actionId, name: consumed.execution.actionName, riskLevel: consumed.execution.riskLevel },
-                  approval: { id: consumed.execution.approvalId, idempotencyKeyDigest: summarizeIdempotencyKey(consumed.execution.idempotencyKey) },
-                  tenantId: user!.id,
-                  executionId,
-                  payload: { leadSubmission: leadSubmission.safeResult },
-                  path: typeof webhookConnector.endpoint_path === 'string' ? webhookConnector.endpoint_path : '/',
-                  allowlist: parseServerActionBridgeAllowlist(webhookConnector.allowed_origins),
-                  signingSecret: signingResolution.signingSecret,
-                });
-                webhookResult.resultSummary = {
-                  ...webhookResult.resultSummary,
-                  signing: signingResolution.resultSummary,
-                };
+                } else {
+                  webhookResult = await deliverActionBridgeWebhook({
+                    connector: { id: webhookConnector.id, baseUrl: webhookConnector.base_url, enabled: webhookConnector.enabled === true },
+                    action: { id: consumed.execution.actionId, name: consumed.execution.actionName, riskLevel: consumed.execution.riskLevel },
+                    approval: { id: consumed.execution.approvalId, idempotencyKeyDigest: summarizeIdempotencyKey(consumed.execution.idempotencyKey) },
+                    tenantId: user!.id,
+                    executionId,
+                    payload: { leadSubmission: leadSubmission.safeResult },
+                    path: typeof webhookConnector.endpoint_path === 'string' ? webhookConnector.endpoint_path : '/',
+                    allowlist: parseServerActionBridgeAllowlist(webhookConnector.allowed_origins),
+                    signingSecret: signingResolution.signingSecret,
+                  });
+                  webhookResult.resultSummary = {
+                    ...webhookResult.resultSummary,
+                    signing: signingResolution.resultSummary,
+                  };
+                }
               }
             }
           } catch (error) {

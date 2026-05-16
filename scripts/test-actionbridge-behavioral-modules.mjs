@@ -69,6 +69,7 @@ for (const [label, pattern] of [
   ['quarantine lookup error fails closed before signing/delivery', /activeQuarantine\.error[\s\S]*webhook_quarantine_lookup_failed[\s\S]*networkExecution: false[\s\S]*else if \(activeQuarantine\.quarantined\)/],
   ['execute checks durable quarantine before signing/delivery', /activeQuarantine\.quarantined[\s\S]*webhook_connector_quarantined[\s\S]*networkExecution: false/],
   ['signing resolution only occurs after lookup error and active quarantine branches', /else \{[\s\S]*const signingResolution = resolveActionBridgeWebhookSigningSecret/],
+  ['unresolved signing ref blocks before throttle and delivery imports are called', /if \(!signingResolution\.ok\) \{[\s\S]*webhook_signing_secret_unresolved[\s\S]*networkExecution: false[\s\S]*\} else \{[\s\S]*const webhookThrottle = decideActionBridgeWebhookDeliveryThrottle[\s\S]*deliverActionBridgeWebhook/],
   ['repeated pilot failures persist durable quarantine', /persistActionBridgeWebhookFailureQuarantine[\s\S]*quarantine_required/],
   ['durable quarantine persistence failure is surfaced', /durablePersistenceStatus[\s\S]*ACTIONBRIDGE_CONNECTOR_QUARANTINE_PERSIST_FAILED/],
 ]) {

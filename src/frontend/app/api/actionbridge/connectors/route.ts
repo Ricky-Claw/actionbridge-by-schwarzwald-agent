@@ -7,6 +7,7 @@ import { createCoreServiceClient } from '@/lib/core/service-client';
 import { isPrivateActionBridgeHost } from '@/lib/actionbridge/http-connector';
 import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
 import { createActionBridgeWhatsAppBusinessDraft, summarizeActionBridgeWhatsAppCapabilities } from '@/lib/actionbridge/whatsapp-business-adapter';
+import { createActionBridgeEmbeddedSetupDescriptor } from '@/lib/actionbridge/embedded-setup-ux';
 
 const ACTIONBRIDGE_CONNECTOR_TYPES = new Set(['http', 'website', 'webhook', 'whatsapp_business']);
 const ACTIONBRIDGE_AUTH_MODES = new Set(['none', 'bearer', 'api_key', 'basic']);
@@ -136,6 +137,15 @@ function serializeActionBridgeConnector(connector: any) {
     endpointPath: connector.endpoint_path || '/',
     webhookSigningMode: connector.webhook_signing_mode || 'unsigned_pilot',
     whatsappBusiness: whatsapp?.cloudApi ? whatsapp : undefined,
+    embeddedSetup: createActionBridgeEmbeddedSetupDescriptor({
+      connector: {
+        type: connector.type,
+        enabled: connector.enabled,
+        networkExecutionEnabled: connector.network_execution_enabled === true,
+        safetyStatus: connector.safety_status,
+        permissionStatus: connector.permission_status,
+      },
+    }),
     createdAt: connector.created_at,
     updatedAt: connector.updated_at,
   };

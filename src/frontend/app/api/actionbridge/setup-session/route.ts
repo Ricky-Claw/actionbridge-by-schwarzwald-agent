@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createCoreServiceClient } from '@/lib/core/service-client';
 import { createActionBridgeSetupSessionView, digestActionBridgeSetupSessionToken, isActionBridgeSetupSessionUsable } from '@/lib/actionbridge/setup-session';
 import { createActionBridgeRateLimitHeaders, enforceActionBridgeRateLimit } from '@/lib/actionbridge/rate-limit';
+import { createActionBridgeEmbeddedSetupDescriptor } from '@/lib/actionbridge/embedded-setup-ux';
 
 function getToken(request: NextRequest): string {
   const url = new URL(request.url);
@@ -40,7 +41,10 @@ export async function GET(request: NextRequest) {
     record.status = 'opened';
   }
 
-  return NextResponse.json({ setupSession: createActionBridgeSetupSessionView(record) }, {
+  return NextResponse.json({
+    setupSession: createActionBridgeSetupSessionView(record),
+    embeddedSetup: createActionBridgeEmbeddedSetupDescriptor(),
+  }, {
     headers: createActionBridgeRateLimitHeaders({ policyName: 'setupSession', remaining: rateLimit.remaining, resetAt: rateLimit.resetAt }),
   });
 }

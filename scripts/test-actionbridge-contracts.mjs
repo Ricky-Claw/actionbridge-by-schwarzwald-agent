@@ -357,6 +357,8 @@ if (!process.exitCode) {
   if (!connectorsRoute.includes(".eq('user_id', user!.id)")) fail('connectors route must scope reads to authenticated owner');
   if (!connectorsRoute.includes('createCoreServiceClient')) fail('connectors route must use server-only service client for connector creation/update');
   if (!connectorsRoute.includes('ACTIONBRIDGE_CONNECTOR_CREATE_FAILED')) fail('connectors route must fail closed on connector creation errors');
+  if (!connectorsRoute.includes('createActionBridgeEmbeddedSetupDescriptor')) fail('connectors route must expose embedded setup descriptor');
+  if (!connectorsRoute.includes('embeddedSetup')) fail('connectors route must include embeddedSetup response field');
   if (!connectorsRoute.includes('webhook_signing_mode') || !connectorsRoute.includes('webhookSigningMode')) fail('connectors route must expose explicit webhook signing mode without secrets');
   if (!connectorsRoute.includes("new Set(['http', 'website', 'webhook', 'whatsapp_business'])")) fail('connectors route must allow website, webhook, and WhatsApp Business connector types');
   if (!connectorsRoute.includes('public_page_extract') || !connectorsRoute.includes('no_form_submit')) fail('website connectors must persist public extraction guardrail capabilities');
@@ -410,7 +412,9 @@ if (!process.exitCode) {
   for (const token of ['digestActionBridgeSetupSessionToken', 'createActionBridgeSetupSessionView', 'isActionBridgeSetupSessionUsable', 'ACTIONBRIDGE_SETUP_SESSION_NOT_FOUND', "status: 'opened'"]) {
     if (!setupSessionRoute.includes(token)) fail(`setup-session route missing ${token}`);
   }
-  if (setupSessionRoute.includes('user_id') || setupSessionRoute.includes('secret_ref')) fail('public setup-session route must not select user_id or secrets');
+  if (!setupSessionRoute.includes('createActionBridgeEmbeddedSetupDescriptor')) fail('setup-session route must include embedded setup descriptor');
+  if (!setupSessionRoute.includes('embeddedSetup')) fail('setup-session route must return embeddedSetup metadata');
+  if (setupSessionRoute.includes('user_id') || setupSessionRoute.includes('secret_ref') || setupSessionRoute.includes(".select('token_digest") || setupSessionRoute.includes('token_digest,')) fail('public setup-session route must not select user_id, secrets, or raw token digests');
   for (const token of ['parseActionBridgeBridgeHandshake', 'actionbridge_setup_links', 'actionbridge_bridge_installations', 'originHeader && originHeader !== parsed.origin', 'connected_only']) {
     if (!bridgeHandshakeRoute.includes(token)) fail(`bridge handshake route missing ${token}`);
   }

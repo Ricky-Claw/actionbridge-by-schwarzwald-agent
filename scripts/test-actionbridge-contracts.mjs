@@ -734,7 +734,7 @@ if (exists('src/frontend/app/actionbridge/wizard/page.tsx')) {
 
 if (exists('src/frontend/app/actionbridge/wizard/EmbeddedSetupWizardClient.tsx')) {
   const wizardClient = read('src/frontend/app/actionbridge/wizard/EmbeddedSetupWizardClient.tsx');
-  for (const token of ['use client', '/api/actionbridge/connectors', 'buildConnectorPayload', 'phoneNumberId', 'businessAccountId', 'endpointPath', 'Draft Connector erstellen', 'Network Execution bleibt aus']) {
+  for (const token of ['use client', '/api/actionbridge/connectors', 'buildConnectorPayload', 'isSafeHttpsUrl', 'isSafeWebhookEndpointPath', 'isMetaNumericId', 'isGraphApiVersion', 'phoneNumberId', 'businessAccountId', 'endpointPath', 'Draft Connector erstellen', 'Network Execution bleibt aus']) {
     if (!wizardClient.includes(token)) fail(`embedded setup wizard client missing ${token}`);
   }
   for (const forbidden of ['secretRef', 'secret_ref', 'secretValue', 'secret_value', 'accessToken', 'access_token', 'idempotency_key', 'token_digest']) {

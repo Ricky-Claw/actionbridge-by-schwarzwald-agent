@@ -25,30 +25,55 @@ const connectorCopy: Record<ConnectorType, { label: string; helper: string }> = 
   },
 };
 
+function isSafeHttpsUrl(value: string) {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'https:') return false;
+    if (parsed.username || parsed.password) return false;
+    if (parsed.hostname === 'localhost' || parsed.hostname.endsWith('.local') || parsed.hostname.endsWith('.internal')) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isSafeWebhookEndpointPath(value: string) {
+  const candidate = value.trim() || '/';
+  if (/^[a-z][a-z0-9+.-]*:/i.test(candidate) || candidate.startsWith('//')) return false;
+  if (candidate.includes('?') || candidate.includes('#') || candidate.includes('\\')) return false;
+  return true;
+}
+
+function isMetaNumericId(value: string) {
+  return /^\d{5,32}$/.test(value.trim());
+}
+
+function isGraphApiVersion(value: string) {
+  return /^v\d{2}\.\d$/.test(value.trim().toLowerCase());
+}
+
 function buildConnectorPayload(type: ConnectorType, form: FormData) {
   const name = String(form.get('name') || '').trim();
+  if (!name) throw new Error('Connector Name fehlt.');
   if (type === 'website') {
-    return {
-      name,
-      type,
-      baseUrl: String(form.get('websiteUrl') || '').trim(),
-    };
+    const baseUrl = String(form.get('websiteUrl') || '').trim();
+    if (!isSafeHttpsUrl(baseUrl)) throw new Error('Website URL muss HTTPS sein und darf keine Userinfo/private Hostnames enthalten.');
+    return { name, type, baseUrl };
   }
   if (type === 'webhook') {
-    return {
-      name,
-      type,
-      baseUrl: String(form.get('webhookOrigin') || '').trim(),
-      endpointPath: String(form.get('endpointPath') || '/').trim(),
-    };
+    const baseUrl = String(form.get('webhookOrigin') || '').trim();
+    const endpointPath = String(form.get('endpointPath') || '/').trim() || '/';
+    if (!isSafeHttpsUrl(baseUrl)) throw new Error('Webhook Origin muss HTTPS sein und darf keine Userinfo/private Hostnames enthalten.');
+    if (!isSafeWebhookEndpointPath(endpointPath)) throw new Error('Endpoint Path muss relativ sein und darf keine Query, Hash, Backslash oder absolute URL enthalten.');
+    return { name, type, baseUrl, endpointPath };
   }
-  return {
-    name,
-    type,
-    phoneNumberId: String(form.get('phoneNumberId') || '').trim(),
-    businessAccountId: String(form.get('businessAccountId') || '').trim(),
-    apiVersion: String(form.get('apiVersion') || 'v20.0').trim(),
-  };
+  const phoneNumberId = String(form.get('phoneNumberId') || '').trim();
+  const businessAccountId = String(form.get('businessAccountId') || '').trim();
+  const apiVersion = String(form.get('apiVersion') || 'v20.0').trim();
+  if (!isMetaNumericId(phoneNumberId)) throw new Error('Phone Number ID muss eine numerische Meta-ID sein.');
+  if (!isMetaNumericId(businessAccountId)) throw new Error('WABA ID muss eine numerische Meta-ID sein.');
+  if (!isGraphApiVersion(apiVersion)) throw new Error('Graph API Version muss dem Format v20.0 entsprechen.');
+  return { name, type, phoneNumberId, businessAccountId, apiVersion };
 }
 
 function redactPayload(payload: Record<string, unknown>) {
@@ -71,7 +96,13 @@ export default function EmbeddedSetupWizardClient() {
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const payload = buildConnectorPayload(connectorType, form);
+    let payload: Record<string, unknown>;
+    try {
+      payload = buildConnectorPayload(connectorType, form);
+    } catch (error) {
+      setSubmitState({ status: 'error', message: error instanceof Error ? error.message : 'Ungültige Connector-Werte.' });
+      return;
+    }
     setSubmitState({ status: 'submitting', message: 'Connector wird sicher als Draft angelegt …', redactedPayload: redactPayload(payload) });
     try {
       const response = await fetch('/api/actionbridge/connectors', {

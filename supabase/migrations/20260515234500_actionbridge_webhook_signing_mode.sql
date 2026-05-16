@@ -12,6 +12,13 @@ ALTER TABLE public.actionbridge_connectors
   CHECK (webhook_signing_mode IN ('unsigned_pilot', 'hmac_sha256'));
 
 ALTER TABLE public.actionbridge_connectors
+  DROP CONSTRAINT IF EXISTS actionbridge_connectors_webhook_signing_ref_format;
+
+ALTER TABLE public.actionbridge_connectors
+  ADD CONSTRAINT actionbridge_connectors_webhook_signing_ref_format
+  CHECK (secret_ref IS NULL OR secret_ref ~ '^actionbridge:webhook-signing:[a-zA-Z0-9._:-]{8,160}$');
+
+ALTER TABLE public.actionbridge_connectors
   DROP CONSTRAINT IF EXISTS actionbridge_connectors_webhook_signing_ref_required;
 
 ALTER TABLE public.actionbridge_connectors

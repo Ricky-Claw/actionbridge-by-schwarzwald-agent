@@ -31,13 +31,15 @@ Required proof:
 - [ ] visibility routes never expose raw secrets.
 
 ## Blocker 4 — Secret Management / Rotation
-Webhook HMAC supports server-side env-backed secret ref resolution, but production needs a real secret-store/rotation story.
+Webhook HMAC supports server-side env-backed secret ref resolution, and the pilot env bootstrap/rotation story is documented in `docs/specs/actionbridge-webhook-secret-bootstrap-rotation.md`. Production still needs a real secret-store/KMS implementation and operational rotation controls.
 
 Required proof:
-- secret refs cannot be client supplied;
-- rotation does not break idempotency/audit;
-- no raw secret in DB/log/UI/agent route;
-- receiver guide is followed by pilot receiver.
+- [x] secret refs cannot be client supplied;
+- [x] pilot rotation story preserves idempotency/audit continuity;
+- [x] no raw secret in DB/log/UI/agent route;
+- [x] receiver guide is followed by pilot receiver documentation;
+- [ ] production KMS/secret-manager resolver with access audit;
+- [ ] operator rotation workflow/job with rollback and monitoring.
 
 ## Blocker 5 — Build/Typecheck/Lint Metadata
 This focused repo snapshot lacks full framework build metadata.

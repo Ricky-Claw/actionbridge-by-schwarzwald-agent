@@ -29,6 +29,7 @@ const requiredFiles = [
   'src/frontend/lib/actionbridge/lead-submission.ts',
   'src/frontend/lib/actionbridge/webhook-delivery.ts',
   'src/frontend/lib/actionbridge/webhook-signing.ts',
+  'src/frontend/lib/actionbridge/whatsapp-business-adapter.ts',
   'src/frontend/lib/actionbridge/domain-verification.ts',
   'src/frontend/lib/actionbridge/setup-links.ts',
   'src/frontend/lib/actionbridge/setup-session.ts',
@@ -356,7 +357,7 @@ if (!process.exitCode) {
   if (!connectorsRoute.includes('createCoreServiceClient')) fail('connectors route must use server-only service client for connector creation/update');
   if (!connectorsRoute.includes('ACTIONBRIDGE_CONNECTOR_CREATE_FAILED')) fail('connectors route must fail closed on connector creation errors');
   if (!connectorsRoute.includes('webhook_signing_mode') || !connectorsRoute.includes('webhookSigningMode')) fail('connectors route must expose explicit webhook signing mode without secrets');
-  if (!connectorsRoute.includes("new Set(['http', 'website', 'webhook'])")) fail('connectors route must allow website and webhook connector types');
+  if (!connectorsRoute.includes("new Set(['http', 'website', 'webhook', 'whatsapp_business'])")) fail('connectors route must allow website, webhook, and WhatsApp Business connector types');
   if (!connectorsRoute.includes('public_page_extract') || !connectorsRoute.includes('no_form_submit')) fail('website connectors must persist public extraction guardrail capabilities');
   if (!connectorsRoute.includes('parsedUrl.username') || !connectorsRoute.includes('parsedUrl.password')) fail('connectors route must reject URL userinfo secrets');
   if (!connectorsRoute.includes("const authMode = type === 'website' ? 'none'")) fail('website connectors must force auth_mode none');
@@ -717,14 +718,56 @@ for (const [file, tokens, label] of [
 }
 
 
+if (exists('docs/specs/actionbridge-whatsapp-business-adapter.md')) {
+  const whatsappSpec = read('docs/specs/actionbridge-whatsapp-business-adapter.md');
+  for (const token of ['WhatsApp Business Adapter', 'type = whatsapp_business', 'Phone Number ID', 'server-owned secret storage', 'network_execution_enabled = false', '24h customer-care window', 'No raw Meta access token']) {
+    if (!whatsappSpec.includes(token)) fail(`WhatsApp Business adapter spec missing ${token}`);
+  }
+  if (!process.exitCode) pass('WhatsApp Business adapter spec defines simple setup and live-send guardrails');
+} else fail('Missing WhatsApp Business adapter spec');
+
+if (exists('src/frontend/lib/actionbridge/whatsapp-business-adapter.ts')) {
+  const whatsappAdapter = read('src/frontend/lib/actionbridge/whatsapp-business-adapter.ts');
+  for (const token of ['createActionBridgeWhatsAppBusinessDraft', 'https://graph.facebook.com', 'whatsapp.phone_number_id:', 'whatsapp.business_account_id:', 'server_secret_ref_required', 'networkExecution:false']) {
+    if (!whatsappAdapter.includes(token)) fail(`WhatsApp Business adapter missing ${token}`);
+  }
+  if (whatsappAdapter.includes('accessToken') || whatsappAdapter.includes('access_token')) fail('WhatsApp adapter must not accept raw access tokens');
+  if (!process.exitCode) pass('WhatsApp Business adapter stores only non-secret setup values');
+}
+
+if (exists('supabase/migrations/20260516094500_actionbridge_whatsapp_business_connector.sql')) {
+  const whatsappMigration = read('supabase/migrations/20260516094500_actionbridge_whatsapp_business_connector.sql');
+  for (const token of ['whatsapp_business', 'actionbridge_connectors_type_check', 'Access tokens must be server-owned secret refs']) {
+    if (!whatsappMigration.includes(token)) fail(`WhatsApp connector migration missing ${token}`);
+  }
+  if (!process.exitCode) pass('WhatsApp Business migration adds connector type without token storage');
+}
+
+if (exists('src/frontend/app/api/actionbridge/connectors/route.ts')) {
+  const connectorsRoute = read('src/frontend/app/api/actionbridge/connectors/route.ts');
+  for (const token of ['whatsapp_business', 'createActionBridgeWhatsAppBusinessDraft', 'summarizeActionBridgeWhatsAppCapabilities', "type === 'whatsapp_business' ? 'bearer'", 'whatsappBusiness']) {
+    if (!connectorsRoute.includes(token)) fail(`connectors route WhatsApp support missing ${token}`);
+  }
+  if (connectorsRoute.includes('accessToken') || connectorsRoute.includes('access_token')) fail('connectors route must not accept WhatsApp raw access tokens');
+  if (!process.exitCode) pass('Connectors route creates safe WhatsApp Business draft connectors');
+}
+
 if (exists('supabase/migrations/20260515234500_actionbridge_webhook_signing_mode.sql')) {
   const signingModeMigration = read('supabase/migrations/20260515234500_actionbridge_webhook_signing_mode.sql');
-  for (const token of ['webhook_signing_mode', 'unsigned_pilot', 'hmac_sha256', 'actionbridge_connectors_webhook_signing_ref_required', 'secret_ref IS NOT NULL']) {
+  for (const token of ['webhook_signing_mode', 'unsigned_pilot', 'hmac_sha256', 'actionbridge_connectors_webhook_signing_ref_required', 'secret_ref IS NOT NULL', 'actionbridge_connectors_webhook_signing_ref_format', '^actionbridge:webhook-signing:']) {
     if (!signingModeMigration.includes(token)) fail(`webhook signing mode migration missing ${token}`);
   }
   if (!process.exitCode) pass('ActionBridge webhook signing mode migration makes unsigned/HMAC explicit');
 }
 
+
+if (exists('docs/specs/actionbridge-webhook-secret-bootstrap-rotation.md')) {
+  const secretRotation = read('docs/specs/actionbridge-webhook-secret-bootstrap-rotation.md');
+  for (const token of ['Webhook-v1 Secret Bootstrap + Rotation', 'ACTIONBRIDGE_WEBHOOK_SIGNING_SECRET_', 'Rotation creates a new ref', 'Existing execution and approval records keep their original idempotency digest', 'never raw refs or secrets', 'KMS/secret-manager backed resolver']) {
+    if (!secretRotation.includes(token)) fail(`webhook secret bootstrap/rotation spec missing ${token}`);
+  }
+  if (!process.exitCode) pass('Webhook secret bootstrap/rotation spec defines pilot env flow and production KMS boundary');
+} else fail('Missing Webhook secret bootstrap/rotation spec');
 
 if (exists('README.md')) {
   const readme = read('README.md');

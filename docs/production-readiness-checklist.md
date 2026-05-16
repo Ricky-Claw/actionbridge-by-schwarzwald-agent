@@ -20,8 +20,9 @@ ActionBridge is suitable for controlled pilot continuation only. This checklist 
 - [x] Agent/tool catalog never exposes `secret_ref`, base URL, token digests, or idempotency keys.
 - [x] Webhook delivery supports HMAC signing when server-owned secret ref resolves.
 - [x] Unresolved signing ref blocks before network.
-- [ ] Real secret manager integration or documented env-secret bootstrap for pilot operations.
-- [ ] Rotation story for webhook signing secrets.
+- [x] Documented env-secret bootstrap for pilot operations.
+- [x] Pilot rotation story for webhook signing secrets.
+- [ ] Real secret manager/KMS integration for production.
 - [x] Receiver verification guide for `X-ActionBridge-Signature`.
 
 ## Gate 3 — Abuse Controls

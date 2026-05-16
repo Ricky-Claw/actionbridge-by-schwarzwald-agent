@@ -6,8 +6,9 @@ import { redactActionBridgeValue } from '@/lib/actionbridge/redaction';
 import { createCoreServiceClient } from '@/lib/core/service-client';
 import { isPrivateActionBridgeHost } from '@/lib/actionbridge/http-connector';
 import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
+import { createActionBridgeWhatsAppBusinessDraft, summarizeActionBridgeWhatsAppCapabilities } from '@/lib/actionbridge/whatsapp-business-adapter';
 
-const ACTIONBRIDGE_CONNECTOR_TYPES = new Set(['http', 'website', 'webhook']);
+const ACTIONBRIDGE_CONNECTOR_TYPES = new Set(['http', 'website', 'webhook', 'whatsapp_business']);
 const ACTIONBRIDGE_AUTH_MODES = new Set(['none', 'bearer', 'api_key', 'basic']);
 
 function normalizeActionBridgeAllowedOrigins(value: unknown): string[] | null {
@@ -60,22 +61,23 @@ async function requireActionBridgeUser() {
 function parseActionBridgeConnectorDraft(body: Record<string, unknown>) {
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   const type = typeof body.type === 'string' && ACTIONBRIDGE_CONNECTOR_TYPES.has(body.type) ? body.type : 'http';
+  const whatsappDraft = type === 'whatsapp_business' ? createActionBridgeWhatsAppBusinessDraft(body) : null;
   const baseUrl = typeof body.baseUrl === 'string' ? body.baseUrl : typeof body.base_url === 'string' ? body.base_url : '';
   const requestedAuthMode = typeof body.authMode === 'string' && ACTIONBRIDGE_AUTH_MODES.has(body.authMode)
     ? body.authMode
     : typeof body.auth_mode === 'string' && ACTIONBRIDGE_AUTH_MODES.has(body.auth_mode)
       ? body.auth_mode
       : 'none';
-  const authMode = type === 'website' ? 'none' : requestedAuthMode;
+  const authMode = type === 'website' ? 'none' : type === 'whatsapp_business' ? 'bearer' : requestedAuthMode;
   const endpointPath = type === 'webhook'
     ? normalizeActionBridgeWebhookEndpointPath(body.endpointPath ?? body.endpoint_path)
     : '/';
 
-  if (!name || !baseUrl || !endpointPath) return null;
+  if (!name || (!baseUrl && !whatsappDraft) || !endpointPath) return null;
 
   let parsedUrl: URL;
   try {
-    parsedUrl = new URL(baseUrl);
+    parsedUrl = new URL(whatsappDraft ? whatsappDraft.baseUrl : baseUrl);
   } catch {
     return null;
   }
@@ -85,7 +87,9 @@ function parseActionBridgeConnectorDraft(body: Record<string, unknown>) {
   if (isPrivateActionBridgeHost(parsedUrl.hostname)) return null;
 
   const allowedOrigins = normalizeActionBridgeAllowedOrigins(
-    body.allowedOrigins ?? body.allowed_origins ?? (type === 'website' ? [parsedUrl.origin] : undefined)
+    type === 'whatsapp_business'
+      ? whatsappDraft?.allowedOrigins
+      : body.allowedOrigins ?? body.allowed_origins ?? (type === 'website' ? [parsedUrl.origin] : undefined)
   );
   if (!allowedOrigins) return null;
 
@@ -97,7 +101,9 @@ function parseActionBridgeConnectorDraft(body: Record<string, unknown>) {
     secret_ref: null,
     enabled: typeof body.enabled === 'boolean' ? body.enabled : true,
     allowed_origins: allowedOrigins,
-    capabilities: type === 'website'
+    capabilities: type === 'whatsapp_business'
+      ? whatsappDraft!.capabilities
+      : type === 'website'
       ? ['public_page_extract', 'same_origin_route_discovery', 'metadata_extract', 'form_inventory', 'no_form_submit', 'networkExecution:false']
       : type === 'webhook'
         ? ['webhook.v1', 'lead.submit', 'approval_required', 'no_redirects', 'server_allowlist_required']
@@ -107,6 +113,31 @@ function parseActionBridgeConnectorDraft(body: Record<string, unknown>) {
     permission_status: 'draft',
     endpoint_path: endpointPath,
     webhook_signing_mode: 'unsigned_pilot',
+  };
+}
+
+function serializeActionBridgeConnector(connector: any) {
+  const whatsapp = connector.type === 'whatsapp_business'
+    ? summarizeActionBridgeWhatsAppCapabilities(connector.capabilities || [])
+    : undefined;
+  return {
+    id: connector.id,
+    tenantId: connector.user_id,
+    name: connector.name,
+    type: connector.type,
+    baseUrl: connector.base_url,
+    authMode: connector.auth_mode,
+    enabled: connector.enabled,
+    allowedOrigins: connector.allowed_origins || [],
+    capabilities: connector.capabilities || [],
+    networkExecutionEnabled: connector.network_execution_enabled === true,
+    safetyStatus: connector.safety_status,
+    permissionStatus: connector.permission_status,
+    endpointPath: connector.endpoint_path || '/',
+    webhookSigningMode: connector.webhook_signing_mode || 'unsigned_pilot',
+    whatsappBusiness: whatsapp?.cloudApi ? whatsapp : undefined,
+    createdAt: connector.created_at,
+    updatedAt: connector.updated_at,
   };
 }
 
@@ -126,24 +157,7 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    connectors: (data || []).map((connector: any) => ({
-      id: connector.id,
-      tenantId: connector.user_id,
-      name: connector.name,
-      type: connector.type,
-      baseUrl: connector.base_url,
-      authMode: connector.auth_mode,
-      enabled: connector.enabled,
-      allowedOrigins: connector.allowed_origins || [],
-      capabilities: connector.capabilities || [],
-      networkExecutionEnabled: connector.network_execution_enabled === true,
-      safetyStatus: connector.safety_status,
-      permissionStatus: connector.permission_status,
-      endpointPath: connector.endpoint_path || '/',
-      webhookSigningMode: connector.webhook_signing_mode || 'unsigned_pilot',
-      createdAt: connector.created_at,
-      updatedAt: connector.updated_at,
-    })),
+    connectors: (data || []).map((connector: any) => serializeActionBridgeConnector(connector)),
   });
 }
 
@@ -186,24 +200,7 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({
-    connector: {
-      id: data.id,
-      tenantId: data.user_id,
-      name: data.name,
-      type: data.type,
-      baseUrl: data.base_url,
-      authMode: data.auth_mode,
-      enabled: data.enabled,
-      allowedOrigins: data.allowed_origins || [],
-      capabilities: data.capabilities || [],
-      networkExecutionEnabled: data.network_execution_enabled === true,
-      safetyStatus: data.safety_status,
-      permissionStatus: data.permission_status,
-      endpointPath: data.endpoint_path || '/',
-      webhookSigningMode: data.webhook_signing_mode || 'unsigned_pilot',
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-    },
+    connector: serializeActionBridgeConnector(data),
   }, { status: 201 });
 }
 

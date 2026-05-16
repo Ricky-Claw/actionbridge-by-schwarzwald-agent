@@ -29,6 +29,7 @@ const requiredFiles = [
   'src/frontend/lib/actionbridge/lead-submission.ts',
   'src/frontend/lib/actionbridge/webhook-delivery.ts',
   'src/frontend/lib/actionbridge/webhook-signing.ts',
+  'src/frontend/lib/actionbridge/embedded-setup-ux.ts',
   'src/frontend/lib/actionbridge/whatsapp-business-adapter.ts',
   'src/frontend/lib/actionbridge/domain-verification.ts',
   'src/frontend/lib/actionbridge/setup-links.ts',
@@ -717,6 +718,30 @@ for (const [file, tokens, label] of [
   }
 }
 
+
+if (exists('src/frontend/lib/actionbridge/embedded-setup-ux.ts')) {
+  const embeddedUx = read('src/frontend/lib/actionbridge/embedded-setup-ux.ts');
+  for (const token of [
+    'ActionBridgeEmbeddedSetupStatus',
+    'draft',
+    'waiting',
+    'connected',
+    'needs_attention',
+    'paused',
+    'ActionBridgeHostThemeTokens',
+    'createActionBridgeEmbeddedSetupDescriptor',
+    'connector.choose',
+    'values.enter',
+    'permissions.choose',
+    'connection.test',
+    'connector.activate',
+    'operatorOnly: false',
+  ]) {
+    if (!embeddedUx.includes(token)) fail(`embedded setup UX contract missing ${token}`);
+  }
+  if (embeddedUx.includes('secret_ref') || embeddedUx.includes('token_digest') || embeddedUx.includes('idempotency_key')) fail('embedded setup UX contract must not expose secret/internal fields');
+  if (!process.exitCode) pass('Embedded setup UX contract defines customer-safe wizard state');
+}
 
 if (exists('docs/specs/actionbridge-whatsapp-business-adapter.md')) {
   const whatsappSpec = read('docs/specs/actionbridge-whatsapp-business-adapter.md');

@@ -289,6 +289,13 @@ for (const token of ['auth.getUser', 'UNAUTHORIZED', 'actionbridge_error_logs', 
   else fail(`errors route missing security marker: ${token}`);
 }
 if (errorsRoute.includes('token_digest') || errorsRoute.includes('secret_ref') || errorsRoute.includes('idempotency_key')) fail('errors route must not select secrets, token digests, or raw idempotency keys');
+const quarantineRoute = read('src/frontend/app/api/actionbridge/quarantine/route.ts');
+for (const token of ['auth.getUser', 'UNAUTHORIZED', 'actionbridge_connector_quarantine', ".eq('user_id', user!.id)", "eq('status', 'active')", 'connector_quarantine.paused', 'connector_quarantine.resolved', 'redactActionBridgeValue']) {
+  if (quarantineRoute.includes(token)) pass(`quarantine route security marker: ${token}`);
+  else fail(`quarantine route missing security marker: ${token}`);
+}
+if (quarantineRoute.includes('secret_ref') || quarantineRoute.includes('token_digest') || quarantineRoute.includes('idempotency_key')) fail('quarantine route must not select secrets, token digests, or raw idempotency keys');
+
 const errorMigration = read('supabase/migrations/20260515000400_actionbridge_error_logs.sql');
 for (const token of ['actionbridge_error_logs', 'ENABLE ROW LEVEL SECURITY', 'auth.uid() = user_id', 'redacted_context', "severity IN ('info', 'low', 'medium', 'high', 'critical')", "category IN ('setup', 'verification', 'approval', 'execution', 'webhook', 'rate_limit', 'system')"]) {
   if (errorMigration.includes(token)) pass(`error-log migration marker: ${token}`);

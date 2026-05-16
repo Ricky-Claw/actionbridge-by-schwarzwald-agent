@@ -16,10 +16,10 @@ Required proof:
 Initial durable connector quarantine primitive exists: `actionbridge_connector_quarantine`, `webhook-quarantine.ts`, and execute-route pre-delivery blocking for active webhook quarantine.
 
 Still required proof before production:
-- route/integration test proves repeated failures persist quarantine state;
-- route/integration test proves quarantined connector cannot deliver;
-- operator can review/resolve with audit;
-- customer-visible reason is safe and redacted.
+- [ ] route/integration test proves repeated failures persist quarantine state;
+- [ ] route/integration test proves quarantined connector cannot deliver;
+- [x] operator can create/review/resolve quarantine with audit via `/api/actionbridge/quarantine`;
+- [x] customer/operator visible reason is safe and redacted.
 
 ## Blocker 3 — Behavioral Security Tests
 Marker tests are not enough for production.

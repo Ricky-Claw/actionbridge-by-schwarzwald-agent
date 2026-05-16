@@ -316,6 +316,7 @@ const routeFiles = [
   'src/frontend/app/api/actionbridge/audit/route.ts',
   'src/frontend/app/api/actionbridge/executions/route.ts',
   'src/frontend/app/api/actionbridge/errors/route.ts',
+  'src/frontend/app/api/actionbridge/quarantine/route.ts',
   'src/frontend/app/api/actionbridge/setup-profile/route.ts',
   'src/frontend/app/api/actionbridge/tool-catalog/route.ts',
   'src/frontend/app/api/actionbridge/connectors/verify/route.ts',
@@ -339,6 +340,7 @@ if (!process.exitCode) {
   const auditRoute = read('src/frontend/app/api/actionbridge/audit/route.ts');
   const executionsRoute = read('src/frontend/app/api/actionbridge/executions/route.ts');
   const errorsRoute = read('src/frontend/app/api/actionbridge/errors/route.ts');
+  const quarantineRoute = read('src/frontend/app/api/actionbridge/quarantine/route.ts');
   const setupProfileRoute = read('src/frontend/app/api/actionbridge/setup-profile/route.ts');
   const toolCatalogRoute = read('src/frontend/app/api/actionbridge/tool-catalog/route.ts');
   const connectorVerifyRoute = read('src/frontend/app/api/actionbridge/connectors/verify/route.ts');
@@ -348,7 +350,7 @@ if (!process.exitCode) {
   const bridgeScriptRoute = read('src/frontend/app/actionbridge/bridge.js/route.ts');
   const capabilitiesRoute = read('src/frontend/app/api/actionbridge/capabilities/route.ts');
   const agentToolsRoute = read('src/frontend/app/api/actionbridge/agent-tools/route.ts');
-  for (const [name, source] of [['actions', actionsRoute], ['connectors', connectorsRoute], ['execute', executeRoute], ['approvals', approvalsRoute], ['audit', auditRoute], ['executions', executionsRoute], ['errors', errorsRoute]]) {
+  for (const [name, source] of [['actions', actionsRoute], ['connectors', connectorsRoute], ['execute', executeRoute], ['approvals', approvalsRoute], ['audit', auditRoute], ['executions', executionsRoute], ['errors', errorsRoute], ['quarantine', quarantineRoute]]) {
     if (!source.includes('createClient')) fail(`${name} route must use Supabase server auth`);
     if (!source.includes('auth.getUser')) fail(`${name} route must require authenticated user`);
     if (!source.includes('UNAUTHORIZED')) fail(`${name} route must fail closed when unauthenticated`);
@@ -397,7 +399,10 @@ if (!process.exitCode) {
   for (const token of ['actionbridge_error_logs', ".eq('user_id', user!.id)", 'toActionBridgeErrorLogView', 'normalizeActionBridgeErrorCategory', 'normalizeActionBridgeErrorSeverity', 'normalizeActionBridgeErrorStatus', 'export async function PATCH', 'export async function DELETE', 'pruneActionBridgeResolvedErrorLogs', 'ACTIONBRIDGE_ERROR_RETENTION_CONFIRMATION_REQUIRED', 'DELETE_EXPIRED_ACTIONBRIDGE_ERROR_LOGS', 'error_log.retention_deleted', 'ACTIONBRIDGE_ERROR_LOG_LIST_FAILED', 'ACTIONBRIDGE_ERROR_STATUS_TRANSITION_BLOCKED', 'error_log.status_changed']) {
     if (!errorsRoute.includes(token)) fail(`errors route missing safe visibility token ${token}`);
   }
-  if (auditRoute.includes('idempotency_key') || executionsRoute.includes('idempotency_key') || errorsRoute.includes('idempotency_key') || executionsRoute.includes('...result')) fail('visibility routes must not return raw idempotency keys or spread stored result JSON');
+  for (const token of ['actionbridge_connector_quarantine', ".eq('user_id', user!.id)", 'toActionBridgeConnectorQuarantineView', 'export async function GET', 'export async function POST', 'export async function PATCH', 'connector_quarantine.paused', 'connector_quarantine.resolved', 'redactActionBridgeValue']) {
+    if (!quarantineRoute.includes(token)) fail(`quarantine route missing safe operator token ${token}`);
+  }
+  if (auditRoute.includes('idempotency_key') || executionsRoute.includes('idempotency_key') || errorsRoute.includes('idempotency_key') || quarantineRoute.includes('idempotency_key') || executionsRoute.includes('...result')) fail('visibility routes must not return raw idempotency keys or spread stored result JSON');
   for (const token of ['normalizeActionBridgeSetupProfile', 'ACTIONBRIDGE_SECRET_STORAGE_NOT_CONFIGURED', 'INVALID_ACTIONBRIDGE_SETUP_PROFILE']) {
     if (!setupProfileRoute.includes(token)) fail(`setup-profile route missing ${token}`);
   }

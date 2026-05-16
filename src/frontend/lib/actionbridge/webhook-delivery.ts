@@ -46,12 +46,21 @@ interface PinnedWebhookResponse {
   text: string;
 }
 
-function safeWebhookPath(path: string | undefined): string {
+type ActionBridgeWebhookEndpointPathValidation = { ok: true; path: string } | { ok: false; reason: string };
+
+export function validateActionBridgeWebhookEndpointPath(path: string | undefined): ActionBridgeWebhookEndpointPathValidation {
   const candidate = typeof path === 'string' && path.trim() ? path.trim() : '/';
-  if (/^[a-z][a-z0-9+.-]*:/i.test(candidate) || candidate.startsWith('//')) return '/';
-  const noHash = candidate.split('#', 1)[0] || '/';
-  const noQuery = noHash.split('?', 1)[0] || '/';
-  return noQuery.startsWith('/') ? noQuery : `/${noQuery}`;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(candidate) || candidate.startsWith('//')) {
+    return { ok: false, reason: 'Webhook endpoint_path must be a relative HTTPS path, not an absolute URL.' };
+  }
+  if (candidate.includes('?') || candidate.includes('#')) {
+    return { ok: false, reason: 'Webhook endpoint_path must not include query strings or fragments.' };
+  }
+  const normalized = candidate.startsWith('/') ? candidate : `/${candidate}`;
+  if (normalized.includes('\\')) {
+    return { ok: false, reason: 'Webhook endpoint_path must not include backslashes.' };
+  }
+  return { ok: true, path: normalized };
 }
 
 function createSignature(secret: string, timestamp: string, body: string): string {
@@ -130,7 +139,11 @@ export async function deliverActionBridgeWebhook(
     return { ok: false, status: 403, networkExecution: false, resultSummary: { status: 'webhook_blocked', reason: 'Webhook-v1 does not support transactional/destructive actions.', networkExecution: false } };
   }
 
-  const path = safeWebhookPath(input.path);
+  const pathDecision = validateActionBridgeWebhookEndpointPath(input.path);
+  if (!pathDecision.ok) {
+    return { ok: false, status: 403, networkExecution: false, resultSummary: { status: 'webhook_blocked', reason: pathDecision.reason, networkExecution: false } };
+  }
+  const path = pathDecision.path;
   const targetValidation = validateActionBridgeTarget({ connector: { baseUrl: input.connector.baseUrl }, path, allowlist: input.allowlist });
   if (!targetValidation.ok || !targetValidation.url) {
     return { ok: false, status: 403, networkExecution: false, resultSummary: { status: 'webhook_blocked', reason: targetValidation.reason || 'Webhook target is not allowed.', networkExecution: false } };

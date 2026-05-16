@@ -25,6 +25,8 @@ function runExtractedFunction(file, functionName, calls) {
   const source = read(file);
   const fnSource = extractFunction(source, functionName)
     .replace(/: string \| null/g, '')
+    .replace(/: string \| undefined/g, '')
+    .replace(/: \{ ok: true; path: string \} \| \{ ok: false; reason: string \}/g, '')
     .replace(/value: unknown/g, 'value')
     .replace(/: unknown/g, '')
     .replace(/: string/g, '')
@@ -52,6 +54,37 @@ runExtractedFunction('src/frontend/app/api/actionbridge/connectors/route.ts', 'n
   ['hash rejected fail-closed', '/hook#frag', null],
   ['backslash rejected fail-closed', '/hook\\evil', null],
 ]);
+
+const webhookDeliverySource = read('src/frontend/lib/actionbridge/webhook-delivery.ts');
+const webhookPathFnSource = extractFunction(webhookDeliverySource, 'validateActionBridgeWebhookEndpointPath')
+  .replace(/: string \| undefined/g, '')
+  .replace(/: ActionBridgeWebhookEndpointPathValidation/g, '');
+const webhookPathContext = {};
+vm.createContext(webhookPathContext);
+vm.runInContext(`${webhookPathFnSource}; globalThis.__fn = validateActionBridgeWebhookEndpointPath;`, webhookPathContext);
+for (const [label, input, expected] of [
+  ['undefined defaults to root', undefined, { ok: true, path: '/' }],
+  ['relative path segment normalized', 'lead-submit', { ok: true, path: '/lead-submit' }],
+  ['absolute path accepted', '/hooks/actionbridge', { ok: true, path: '/hooks/actionbridge' }],
+  ['absolute URL rejected fail-closed', 'https://evil.test/hook', { ok: false }],
+  ['scheme-relative URL rejected fail-closed', '//evil.test/hook', { ok: false }],
+  ['query rejected fail-closed', '/hook?token=secret', { ok: false }],
+  ['hash rejected fail-closed', '/hook#frag', { ok: false }],
+  ['backslash rejected fail-closed', '/hook\\evil', { ok: false }],
+]) {
+  const actual = webhookPathContext.__fn(input);
+  const matches = expected.ok ? actual.ok === true && actual.path === expected.path : actual.ok === false && typeof actual.reason === 'string';
+  if (matches) pass(`validateActionBridgeWebhookEndpointPath: ${label}`, `=> ${JSON.stringify(actual)}`);
+  else fail(`validateActionBridgeWebhookEndpointPath: ${label}`, `expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+}
+
+for (const [label, pattern] of [
+  ['delivery validates endpoint path before target validation', /const pathDecision = validateActionBridgeWebhookEndpointPath\(input\.path\)[\s\S]*networkExecution: false[\s\S]*const path = pathDecision\.path[\s\S]*validateActionBridgeTarget/],
+  ['delivery no longer strips query or fragment from unsafe paths', /candidate\.includes\('\?'\) \|\| candidate\.includes\('#'\)/],
+]) {
+  if (pattern.test(webhookDeliverySource)) pass(`webhook delivery endpoint path behavior: ${label}`);
+  else fail(`webhook delivery endpoint path behavior: ${label}`);
+}
 
 const signingSource = read('src/frontend/lib/actionbridge/webhook-signing.ts');
 for (const [label, pattern] of [

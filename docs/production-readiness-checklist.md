@@ -11,7 +11,7 @@ ActionBridge is suitable for controlled pilot continuation only. This checklist 
 - [x] Webhook-v1 pinned outbound connection to validated DNS result.
 - [x] Server-owned relative-only `endpoint_path`.
 - [x] Fail-closed unresolved signing secret reference.
-- [ ] Behavioral endpoint path rejection tests. _Spec-model coverage added; production route/import coverage still required._
+- [x] Behavioral endpoint path rejection tests.
 - [ ] Behavioral DNS rebinding/pinned-connection tests.
 - [ ] Behavioral timeout/non-2xx persistence tests. _Spec-model coverage added; production route/persistence coverage still required._
 

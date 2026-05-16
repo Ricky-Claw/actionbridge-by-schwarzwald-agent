@@ -17,12 +17,13 @@ function normalizeActionBridgeWebhookEndpointPath(value) {
   return path;
 }
 
-function safeWebhookDeliveryPath(path) {
+function validateWebhookDeliveryPath(path) {
   const candidate = typeof path === 'string' && path.trim() ? path.trim() : '/';
-  if (/^[a-z][a-z0-9+.-]*:/i.test(candidate) || candidate.startsWith('//')) return '/';
-  const noHash = candidate.split('#', 1)[0] || '/';
-  const noQuery = noHash.split('?', 1)[0] || '/';
-  return noQuery.startsWith('/') ? noQuery : `/${noQuery}`;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(candidate) || candidate.startsWith('//')) return { ok: false };
+  if (candidate.includes('?') || candidate.includes('#')) return { ok: false };
+  const normalized = candidate.startsWith('/') ? candidate : `/${candidate}`;
+  if (normalized.includes('\\')) return { ok: false };
+  return { ok: true, path: normalized };
 }
 
 function digestSecretRef(secretRef) {
@@ -78,14 +79,17 @@ for (const [label, value, expected] of [
 }
 
 for (const [label, value, expected] of [
-  ['delivery falls back on absolute override', 'https://evil.test/hook', '/'],
-  ['delivery falls back on scheme-relative override', '//evil.test/hook', '/'],
-  ['delivery strips accidental query', '/hook?token=secret', '/hook'],
-  ['delivery strips accidental hash', '/hook#secret', '/hook'],
+  ['delivery accepts relative segment', 'lead-submit', { ok: true, path: '/lead-submit' }],
+  ['delivery rejects absolute override fail-closed', 'https://evil.test/hook', { ok: false }],
+  ['delivery rejects scheme-relative override fail-closed', '//evil.test/hook', { ok: false }],
+  ['delivery rejects accidental query fail-closed', '/hook?token=secret', { ok: false }],
+  ['delivery rejects accidental hash fail-closed', '/hook#secret', { ok: false }],
+  ['delivery rejects backslash fail-closed', '/hook\\evil', { ok: false }],
 ]) {
-  const actual = safeWebhookDeliveryPath(value);
-  if (actual === expected) pass(`endpoint path delivery hardening: ${label}`, `=> ${actual}`);
-  else fail(`endpoint path delivery hardening: ${label}`, `expected ${expected}, got ${actual}`);
+  const actual = validateWebhookDeliveryPath(value);
+  const matches = expected.ok ? actual.ok === true && actual.path === expected.path : actual.ok === false;
+  if (matches) pass(`endpoint path delivery hardening: ${label}`, `=> ${JSON.stringify(actual)}`);
+  else fail(`endpoint path delivery hardening: ${label}`, `expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
 }
 
 const secretRef = 'actionbridge:webhook-signing:pilot-webhook-0001';

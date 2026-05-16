@@ -723,6 +723,15 @@ for (const [file, tokens, label] of [
 }
 
 
+if (exists('src/frontend/app/actionbridge/wizard/page.tsx')) {
+  const embeddedWizard = read('src/frontend/app/actionbridge/wizard/page.tsx');
+  for (const token of ['ActionBridge Embedded Setup', 'embeddedSetup', 'whatsapp_business', 'network off', 'Operator-only', 'Ein Setup-Plugin, kein weiteres Dashboard']) {
+    if (!embeddedWizard.includes(token)) fail(`embedded setup wizard page missing ${token}`);
+  }
+  if (embeddedWizard.includes('secret_ref') || embeddedWizard.includes('token_digest') || embeddedWizard.includes('idempotency_key')) fail('embedded setup wizard must not expose internal secret field names');
+  if (!process.exitCode) pass('Embedded setup wizard page presents customer-safe connector setup flow');
+} else fail('Missing embedded setup wizard page');
+
 if (exists('docs/specs/actionbridge-embedded-setup-plugin.md')) {
   const embeddedSpec = read('docs/specs/actionbridge-embedded-setup-plugin.md');
   for (const token of ['Embedded Setup Plugin', 'not a standalone dashboard', 'Host Theme Tokens', 'Customer Wizard', 'Operator Surface', 'No raw secrets']) {

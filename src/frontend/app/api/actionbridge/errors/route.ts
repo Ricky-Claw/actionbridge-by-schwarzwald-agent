@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createCoreServiceClient } from '@/lib/core/service-client';
 import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
-import { normalizeActionBridgeErrorCategory, normalizeActionBridgeErrorSeverity, normalizeActionBridgeErrorStatus, toActionBridgeErrorLogView } from '@/lib/actionbridge/error-log';
+import { normalizeActionBridgeErrorCategory, normalizeActionBridgeErrorSeverity, normalizeActionBridgeErrorStatus, pruneActionBridgeResolvedErrorLogs, toActionBridgeErrorLogView } from '@/lib/actionbridge/error-log';
 
 async function requireActionBridgeUser() {
   const supabase = await createClient();
@@ -48,6 +48,44 @@ export async function GET(request: NextRequest) {
     errorLogs: (data || []).map(toActionBridgeErrorLogView),
     filters: { category, severity, status: status || null },
   });
+}
+
+export async function DELETE(request: NextRequest) {
+  const { user, response } = await requireActionBridgeUser();
+  if (response) return response;
+
+  const body = await request.json().catch(() => ({}));
+  const dryRun = body.dryRun !== false;
+  const confirm = typeof body.confirm === 'string' ? body.confirm : '';
+  if (!dryRun && confirm !== 'DELETE_EXPIRED_ACTIONBRIDGE_ERROR_LOGS') {
+    return NextResponse.json({ error: 'ACTIONBRIDGE_ERROR_RETENTION_CONFIRMATION_REQUIRED' }, { status: 400 });
+  }
+
+  const serviceSupabase = createCoreServiceClient();
+  if (!serviceSupabase) return NextResponse.json({ error: 'ACTIONBRIDGE_ERROR_RETENTION_UNAVAILABLE' }, { status: 503 });
+
+  const result = await pruneActionBridgeResolvedErrorLogs({
+    supabase: serviceSupabase,
+    userId: user!.id,
+    dryRun,
+  }).catch(() => null);
+  if (!result) return NextResponse.json({ error: 'ACTIONBRIDGE_ERROR_RETENTION_FAILED' }, { status: 409 });
+
+  await persistActionBridgeControlAuditEvent(serviceSupabase, {
+    userId: user!.id,
+    eventName: dryRun ? 'error_log.retention_dry_run' : 'error_log.retention_deleted',
+    input: { dryRun },
+    status: 'succeeded',
+    resultSummary: {
+      dryRun: result.dryRun,
+      deletedCount: result.deletedCount,
+      candidates: result.candidates,
+      cutoffs: result.cutoffs,
+      redacted: true,
+    },
+  });
+
+  return NextResponse.json({ retention: result });
 }
 
 export async function PATCH(request: NextRequest) {

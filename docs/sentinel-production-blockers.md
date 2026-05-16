@@ -52,10 +52,11 @@ Required proof:
 - browser/userflow smoke test.
 
 ## Blocker 6 — Operational Retention
-Error logs are bounded and redacted, but retention is policy-only.
+Error logs are bounded and redacted. A resolved-log retention operation now exists on `/api/actionbridge/errors` with dry-run default, explicit destructive confirmation, severity-age cutoffs, and redacted deletion summary audit.
 
 Required proof:
-- retention job or admin operation;
-- resolved-log deletion by severity age;
-- deletion summary audit;
-- GDPR handling documented for pilot customers.
+- [x] retention job or admin operation;
+- [x] resolved-log deletion by severity age;
+- [x] deletion summary audit;
+- [x] GDPR handling documented for pilot customers;
+- [ ] scheduled/background execution and operator UI for routine production operations.

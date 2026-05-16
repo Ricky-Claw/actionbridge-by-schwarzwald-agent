@@ -34,12 +34,29 @@ export interface ActionBridgeErrorLogView {
   resolvedAt: string | null;
 }
 
+export interface ActionBridgeErrorLogRetentionResult {
+  dryRun: boolean;
+  deletedCount: number;
+  candidates: Record<'info_low_30d' | 'medium_90d' | 'high_critical_180d', number>;
+  cutoffs: Record<'info_low_30d' | 'medium_90d' | 'high_critical_180d', string>;
+}
+
 const ERROR_CONTEXT_LIMITS = {
   maxDepth: 4,
   maxKeys: 24,
   maxArrayItems: 20,
   maxStringLength: 500,
 };
+
+const RETENTION_POLICY = {
+  infoLowDays: 30,
+  mediumDays: 90,
+  highCriticalDays: 180,
+};
+
+function retentionCutoff(now: Date, days: number): string {
+  return new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+}
 
 export function normalizeActionBridgeErrorSeverity(value: unknown): ActionBridgeErrorSeverity | null {
   return value === 'info' || value === 'low' || value === 'medium' || value === 'high' || value === 'critical' ? value : null;
@@ -110,5 +127,68 @@ export function toActionBridgeErrorLogView(row: any): ActionBridgeErrorLogView {
     status: row.status,
     createdAt: row.created_at,
     resolvedAt: row.resolved_at || null,
+  };
+}
+
+async function pruneResolvedErrorLogsForPolicy(input: {
+  supabase: SupabaseClient;
+  userId: string;
+  severities: ActionBridgeErrorSeverity[];
+  cutoff: string;
+  dryRun: boolean;
+}): Promise<number> {
+  let query = (input.supabase as any)
+    .from('actionbridge_error_logs')
+    .select('id', { count: 'exact', head: input.dryRun })
+    .eq('user_id', input.userId)
+    .eq('status', 'resolved')
+    .in('severity', input.severities)
+    .lt('resolved_at', input.cutoff);
+
+  if (input.dryRun) {
+    const { count } = await query;
+    return count || 0;
+  }
+
+  const { data, error } = await (input.supabase as any)
+    .from('actionbridge_error_logs')
+    .delete()
+    .eq('user_id', input.userId)
+    .eq('status', 'resolved')
+    .in('severity', input.severities)
+    .lt('resolved_at', input.cutoff)
+    .select('id');
+
+  if (error) throw new Error('ACTIONBRIDGE_ERROR_LOG_RETENTION_DELETE_FAILED');
+  return Array.isArray(data) ? data.length : 0;
+}
+
+export async function pruneActionBridgeResolvedErrorLogs(input: {
+  supabase: SupabaseClient;
+  userId: string;
+  dryRun?: boolean;
+  now?: Date;
+}): Promise<ActionBridgeErrorLogRetentionResult> {
+  const now = input.now || new Date();
+  const dryRun = input.dryRun !== false;
+  const cutoffs = {
+    info_low_30d: retentionCutoff(now, RETENTION_POLICY.infoLowDays),
+    medium_90d: retentionCutoff(now, RETENTION_POLICY.mediumDays),
+    high_critical_180d: retentionCutoff(now, RETENTION_POLICY.highCriticalDays),
+  };
+
+  const infoLow = await pruneResolvedErrorLogsForPolicy({ supabase: input.supabase, userId: input.userId, severities: ['info', 'low'], cutoff: cutoffs.info_low_30d, dryRun });
+  const medium = await pruneResolvedErrorLogsForPolicy({ supabase: input.supabase, userId: input.userId, severities: ['medium'], cutoff: cutoffs.medium_90d, dryRun });
+  const highCritical = await pruneResolvedErrorLogsForPolicy({ supabase: input.supabase, userId: input.userId, severities: ['high', 'critical'], cutoff: cutoffs.high_critical_180d, dryRun });
+
+  return {
+    dryRun,
+    deletedCount: dryRun ? 0 : infoLow + medium + highCritical,
+    candidates: {
+      info_low_30d: infoLow,
+      medium_90d: medium,
+      high_critical_180d: highCritical,
+    },
+    cutoffs,
   };
 }

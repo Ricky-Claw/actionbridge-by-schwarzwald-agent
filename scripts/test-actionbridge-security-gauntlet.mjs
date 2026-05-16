@@ -278,13 +278,13 @@ process.exit(failed ? 1 : 0);
 
 
 const errorLog = read('src/frontend/lib/actionbridge/error-log.ts');
-for (const token of ['persistActionBridgeErrorEvent', 'redactActionBridgeValue', 'sanitizeActionBridgeErrorContext', 'maxDepth', 'maxKeys', '[circular]', 'ActionBridgeErrorSeverity', 'critical', 'redacted_context', 'actionbridge_error_logs']) {
+for (const token of ['persistActionBridgeErrorEvent', 'redactActionBridgeValue', 'sanitizeActionBridgeErrorContext', 'maxDepth', 'maxKeys', '[circular]', 'ActionBridgeErrorSeverity', 'critical', 'redacted_context', 'actionbridge_error_logs', 'pruneActionBridgeResolvedErrorLogs', 'info_low_30d', 'medium_90d', 'high_critical_180d']) {
   if (errorLog.includes(token)) pass(`error-log security marker: ${token}`);
   else fail(`error-log missing security marker: ${token}`);
 }
 if (errorLog.includes('secretValue') || errorLog.includes('idempotency_key')) fail('error-log must not expose raw secrets or raw idempotency keys');
 const errorsRoute = read('src/frontend/app/api/actionbridge/errors/route.ts');
-for (const token of ['auth.getUser', 'UNAUTHORIZED', 'actionbridge_error_logs', ".eq('user_id', user!.id)", 'toActionBridgeErrorLogView', 'export async function PATCH', 'ACTIONBRIDGE_ERROR_STATUS_TRANSITION_BLOCKED', 'error_log.status_changed', 'ACTIONBRIDGE_ERROR_LOG_LIST_FAILED']) {
+for (const token of ['auth.getUser', 'UNAUTHORIZED', 'actionbridge_error_logs', ".eq('user_id', user!.id)", 'toActionBridgeErrorLogView', 'export async function PATCH', 'export async function DELETE', 'ACTIONBRIDGE_ERROR_RETENTION_CONFIRMATION_REQUIRED', 'DELETE_EXPIRED_ACTIONBRIDGE_ERROR_LOGS', 'error_log.retention_deleted', 'ACTIONBRIDGE_ERROR_STATUS_TRANSITION_BLOCKED', 'error_log.status_changed', 'ACTIONBRIDGE_ERROR_LOG_LIST_FAILED']) {
   if (errorsRoute.includes(token)) pass(`errors route security marker: ${token}`);
   else fail(`errors route missing security marker: ${token}`);
 }

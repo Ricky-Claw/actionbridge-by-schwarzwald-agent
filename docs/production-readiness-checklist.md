@@ -41,7 +41,7 @@ ActionBridge is suitable for controlled pilot continuation only. This checklist 
 - [x] Error log table/API with category, severity, status lifecycle.
 - [x] Bounded error context and circular guard.
 - [x] Compare-and-set error status updates.
-- [ ] Retention/GDPR policy implemented operationally.
+- [x] Retention/GDPR policy implemented operationally for resolved error logs.
 - [ ] Operator notification/alerting for High/Critical errors.
 - [ ] Dashboard UI consuming `/api/actionbridge/errors`.
 

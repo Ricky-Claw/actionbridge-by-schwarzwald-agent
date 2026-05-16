@@ -394,7 +394,7 @@ if (!process.exitCode) {
   for (const token of ['actionbridge_executions', ".eq('user_id', user!.id)", 'safe_result', 'sanitizeActionBridgeVisibilityResult(value)', 'ACTIONBRIDGE_EXECUTIONS_LIST_FAILED']) {
     if (!executionsRoute.includes(token)) fail(`executions route missing safe visibility token ${token}`);
   }
-  for (const token of ['actionbridge_error_logs', ".eq('user_id', user!.id)", 'toActionBridgeErrorLogView', 'normalizeActionBridgeErrorCategory', 'normalizeActionBridgeErrorSeverity', 'normalizeActionBridgeErrorStatus', 'export async function PATCH', 'ACTIONBRIDGE_ERROR_LOG_LIST_FAILED', 'ACTIONBRIDGE_ERROR_STATUS_TRANSITION_BLOCKED', 'error_log.status_changed']) {
+  for (const token of ['actionbridge_error_logs', ".eq('user_id', user!.id)", 'toActionBridgeErrorLogView', 'normalizeActionBridgeErrorCategory', 'normalizeActionBridgeErrorSeverity', 'normalizeActionBridgeErrorStatus', 'export async function PATCH', 'export async function DELETE', 'pruneActionBridgeResolvedErrorLogs', 'ACTIONBRIDGE_ERROR_RETENTION_CONFIRMATION_REQUIRED', 'DELETE_EXPIRED_ACTIONBRIDGE_ERROR_LOGS', 'error_log.retention_deleted', 'ACTIONBRIDGE_ERROR_LOG_LIST_FAILED', 'ACTIONBRIDGE_ERROR_STATUS_TRANSITION_BLOCKED', 'error_log.status_changed']) {
     if (!errorsRoute.includes(token)) fail(`errors route missing safe visibility token ${token}`);
   }
   if (auditRoute.includes('idempotency_key') || executionsRoute.includes('idempotency_key') || errorsRoute.includes('idempotency_key') || executionsRoute.includes('...result')) fail('visibility routes must not return raw idempotency keys or spread stored result JSON');

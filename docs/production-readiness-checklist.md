@@ -43,7 +43,7 @@ ActionBridge is suitable for controlled pilot continuation only. This checklist 
 - [x] Compare-and-set error status updates.
 - [x] Retention/GDPR policy implemented operationally for resolved error logs.
 - [ ] Operator notification/alerting for High/Critical errors.
-- [ ] Dashboard UI consuming `/api/actionbridge/errors`.
+- [x] Operator failure UI consuming `/api/actionbridge/errors`.
 
 ## Gate 5 — Verification Tooling
 - [x] `npm test` gate.

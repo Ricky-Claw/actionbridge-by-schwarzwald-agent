@@ -1,3 +1,5 @@
+import ActionBridgeErrorOpsClient from './ActionBridgeErrorOpsClient';
+
 const failureStates = [
   ['Setup', 'Invalid, expired, or closed setup links are logged with redacted context so operators can issue a new link safely.'],
   ['Verification', 'Domain verification failures show method, status, and safe evidence without exposing tokens or secrets.'],
@@ -24,6 +26,8 @@ export default function ActionBridgeFailuresPage() {
             </article>
           ))}
         </div>
+        <ActionBridgeErrorOpsClient />
+
         <div className="mt-8 rounded-3xl border border-red-300/20 bg-red-500/10 p-5">
           <h2 className="font-bold text-red-100">Production rule</h2>
           <p className="mt-2 text-sm text-stone-300">

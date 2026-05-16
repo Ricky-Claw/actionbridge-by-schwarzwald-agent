@@ -664,10 +664,21 @@ process.exit(process.exitCode || 0);
 
 if (exists('src/frontend/app/actionbridge/failures/page.tsx')) {
   const failuresPage = read('src/frontend/app/actionbridge/failures/page.tsx');
-  for (const token of ['Error Log & Failure Monitor', '/api/actionbridge/errors', 'category', 'severity', 'error code', 'High/Critical errors', 'raw tokens']) {
+  for (const token of ['Error Log & Failure Monitor', '/api/actionbridge/errors', 'category', 'severity', 'error code', 'High/Critical errors', 'raw tokens', 'ActionBridgeErrorOpsClient']) {
     if (!failuresPage.includes(token)) fail(`failures page missing error-monitor token ${token}`);
   }
   if (!process.exitCode) pass('ActionBridge failure page documents real error monitor and safe debugging fields');
+}
+
+if (exists('src/frontend/app/actionbridge/failures/ActionBridgeErrorOpsClient.tsx')) {
+  const errorOpsClient = read('src/frontend/app/actionbridge/failures/ActionBridgeErrorOpsClient.tsx');
+  for (const token of ['use client', '/api/actionbridge/errors?limit=25', "method: 'DELETE'", "method: 'PATCH'", 'Retention dry-run', 'DELETE_EXPIRED_ACTIONBRIDGE_ERROR_LOGS', 'Show redacted context', 'Acknowledge', 'Resolve']) {
+    if (!errorOpsClient.includes(token)) fail(`error ops client missing ${token}`);
+  }
+  for (const forbidden of ['secret_ref', 'token_digest', 'idempotency_key', 'secretValue']) {
+    if (errorOpsClient.includes(forbidden)) fail(`error ops client must not expose ${forbidden}`);
+  }
+  if (!process.exitCode) pass('ActionBridge operator error ops UI consumes redacted errors and retention operations');
 }
 
 

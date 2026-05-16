@@ -59,4 +59,5 @@ Required proof:
 - [x] resolved-log deletion by severity age;
 - [x] deletion summary audit;
 - [x] GDPR handling documented for pilot customers;
-- [ ] scheduled/background execution and operator UI for routine production operations.
+- [x] operator UI for routine dry-run/delete retention operations;
+- [ ] scheduled/background execution for production operations.

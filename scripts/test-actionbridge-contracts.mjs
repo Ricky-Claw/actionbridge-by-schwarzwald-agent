@@ -725,12 +725,23 @@ for (const [file, tokens, label] of [
 
 if (exists('src/frontend/app/actionbridge/wizard/page.tsx')) {
   const embeddedWizard = read('src/frontend/app/actionbridge/wizard/page.tsx');
-  for (const token of ['ActionBridge Embedded Setup', 'embeddedSetup', 'whatsapp_business', 'network off', 'Operator-only', 'Ein Setup-Plugin, kein weiteres Dashboard']) {
+  for (const token of ['ActionBridge Embedded Setup', 'embeddedSetup', 'whatsapp_business', 'network off', 'Operator-only', 'Ein Setup-Plugin, kein weiteres Dashboard', 'EmbeddedSetupWizardClient']) {
     if (!embeddedWizard.includes(token)) fail(`embedded setup wizard page missing ${token}`);
   }
   if (embeddedWizard.includes('secret_ref') || embeddedWizard.includes('token_digest') || embeddedWizard.includes('idempotency_key')) fail('embedded setup wizard must not expose internal secret field names');
   if (!process.exitCode) pass('Embedded setup wizard page presents customer-safe connector setup flow');
 } else fail('Missing embedded setup wizard page');
+
+if (exists('src/frontend/app/actionbridge/wizard/EmbeddedSetupWizardClient.tsx')) {
+  const wizardClient = read('src/frontend/app/actionbridge/wizard/EmbeddedSetupWizardClient.tsx');
+  for (const token of ['use client', '/api/actionbridge/connectors', 'buildConnectorPayload', 'phoneNumberId', 'businessAccountId', 'endpointPath', 'Draft Connector erstellen', 'Network Execution bleibt aus']) {
+    if (!wizardClient.includes(token)) fail(`embedded setup wizard client missing ${token}`);
+  }
+  for (const forbidden of ['secretRef', 'secret_ref', 'secretValue', 'secret_value', 'accessToken', 'access_token', 'idempotency_key', 'token_digest']) {
+    if (wizardClient.includes(forbidden)) fail(`embedded setup wizard client must not expose ${forbidden}`);
+  }
+  if (!process.exitCode) pass('Embedded setup wizard client posts only safe connector draft fields');
+} else fail('Missing embedded setup wizard client');
 
 if (exists('docs/specs/actionbridge-embedded-setup-plugin.md')) {
   const embeddedSpec = read('docs/specs/actionbridge-embedded-setup-plugin.md');

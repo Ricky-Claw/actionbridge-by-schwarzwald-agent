@@ -1,3 +1,5 @@
+import EmbeddedSetupWizardClient from './EmbeddedSetupWizardClient';
+
 const connectorCards = [
   {
     type: 'website',
@@ -89,6 +91,8 @@ export default function ActionBridgeWizardPage() {
             </article>
           ))}
         </div>
+
+        <EmbeddedSetupWizardClient />
 
         <div className="mt-10 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
           <section className="rounded-[1.5rem] border border-white/10 bg-white/[0.04] p-5">

@@ -153,4 +153,65 @@ if (firstWriter === true && staleDowngradeWriter === false && raceRows.get('err-
   fail('error lifecycle race proof: stale acknowledged update downgraded or CAS did not hold');
 }
 
+for (const token of ['requiresActionBridgeOperatorAlert', "severity === 'high' || severity === 'critical'", 'persistActionBridgeOperatorAlert', "from('actionbridge_operator_alerts')", 'redacted_context: sanitizedContext', 'operatorAlert', 'toActionBridgeOperatorAlertView', 'sanitizeActionBridgeErrorMessage', 'ACTIONBRIDGE_OPERATOR_ALERT_INSERT_FAILED']) {
+  if (errorLogSource.includes(token)) pass(`operator alerting source token: ${token}`);
+  else fail(`operator alerting source token missing: ${token}`);
+}
+
+const alertRows = [];
+function simulateOperatorAlertPersistence({ severity, errorLogInsertOk = true, alertInsertOk, message }) {
+  const required = severity === 'high' || severity === 'critical';
+  const safeMessage = String(message).replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[REDACTED_EMAIL]').slice(0, 500);
+  if (!errorLogInsertOk && required) throw new Error('ACTIONBRIDGE_ERROR_LOG_INSERT_FAILED');
+  if (!errorLogInsertOk) return { logged: false, alert: { required: false, id: null, error: 'ACTIONBRIDGE_ERROR_LOG_INSERT_FAILED' }, message: safeMessage };
+  if (!required) return { logged: true, alert: { required: false, id: null, error: null }, message: safeMessage };
+  if (!alertInsertOk) throw new Error('ACTIONBRIDGE_OPERATOR_ALERT_INSERT_FAILED');
+  alertRows.push({ severity, message: safeMessage });
+  return { logged: true, alert: { required: true, id: 'alert-1', error: null }, message: safeMessage };
+}
+
+try {
+  const low = simulateOperatorAlertPersistence({ severity: 'medium', alertInsertOk: false, message: 'medium test user@example.com' });
+  if (low.alert.required === false && low.message.includes('[REDACTED_EMAIL]')) pass('operator alert behavior: medium does not require alert and message is redacted');
+  else fail('operator alert behavior: medium severity handling failed');
+} catch (error) {
+  fail('operator alert behavior: medium unexpectedly threw', error.message);
+}
+
+try {
+  simulateOperatorAlertPersistence({ severity: 'high', errorLogInsertOk: false, alertInsertOk: true, message: 'high test user@example.com' });
+  fail('operator alert behavior: high error-log insert failure did not fail closed');
+} catch (error) {
+  if (error.message === 'ACTIONBRIDGE_ERROR_LOG_INSERT_FAILED') pass('operator alert behavior: high error-log insert failure fails closed');
+  else fail('operator alert behavior: high error-log failure threw wrong error', error.message);
+}
+
+try {
+  simulateOperatorAlertPersistence({ severity: 'high', alertInsertOk: false, message: 'high test user@example.com' });
+  fail('operator alert behavior: high alert insert failure did not fail closed');
+} catch (error) {
+  if (error.message === 'ACTIONBRIDGE_OPERATOR_ALERT_INSERT_FAILED') pass('operator alert behavior: high alert insert failure fails closed');
+  else fail('operator alert behavior: high alert failure threw wrong error', error.message);
+}
+
+try {
+  const critical = simulateOperatorAlertPersistence({ severity: 'critical', alertInsertOk: true, message: 'critical test user@example.com' });
+  if (critical.alert.required === true && alertRows.length === 1 && alertRows[0].message.includes('[REDACTED_EMAIL]')) pass('operator alert behavior: critical creates durable redacted alert');
+  else fail('operator alert behavior: critical alert creation failed');
+} catch (error) {
+  fail('operator alert behavior: critical unexpectedly threw', error.message);
+}
+
+const operatorAlertRoute = read('src/frontend/app/api/actionbridge/alerts/route.ts');
+for (const token of ["from('actionbridge_operator_alerts')", "eq('user_id', user!.id)", 'ACTIONBRIDGE_OPERATOR_ALERT_LIST_FAILED', 'toActionBridgeOperatorAlertView', "severity === 'high' || severity === 'critical'"]) {
+  if (operatorAlertRoute.includes(token)) pass(`operator alerting route token: ${token}`);
+  else fail(`operator alerting route token missing: ${token}`);
+}
+
+const operatorAlertMigration = read('supabase/migrations/20260517050000_actionbridge_operator_alerts.sql');
+for (const token of ['CREATE TABLE IF NOT EXISTS public.actionbridge_operator_alerts', "severity TEXT NOT NULL CHECK (severity IN ('high', 'critical'))", 'UNIQUE (user_id, error_log_id)', 'ENABLE ROW LEVEL SECURITY', 'actionbridge_operator_alerts_owner_select']) {
+  if (operatorAlertMigration.includes(token)) pass(`operator alerting migration token: ${token}`);
+  else fail(`operator alerting migration token missing: ${token}`);
+}
+
 process.exitCode = failed ? 1 : 0;

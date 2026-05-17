@@ -61,7 +61,7 @@ ActionBridge is suitable for controlled pilot continuation only. This checklist 
 - [x] Embedded setup-plugin UX boundary documented.
 - [ ] Embedded setup wizard UI implemented.
 - [ ] Standalone setup UX consumes real API state instead of explanatory static pages.
-- [ ] Operator-facing smoke runbook for pilot.
+- [x] Operator-facing smoke runbook for pilot.
 
 ## Rule
 No production/broad rollout until every unchecked item above is either implemented and verified or explicitly accepted as out-of-scope by Elvis/Ricky with Sentinel sign-off.

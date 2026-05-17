@@ -70,6 +70,16 @@ export function normalizeActionBridgeErrorStatus(value: unknown): ActionBridgeEr
   return value === 'open' || value === 'acknowledged' || value === 'resolved' ? value : null;
 }
 
+const ACTIONBRIDGE_ERROR_STATUS_RANK: Record<ActionBridgeErrorStatus, number> = {
+  open: 0,
+  acknowledged: 1,
+  resolved: 2,
+};
+
+export function canTransitionActionBridgeErrorStatus(currentStatus: ActionBridgeErrorStatus, nextStatus: ActionBridgeErrorStatus): boolean {
+  return ACTIONBRIDGE_ERROR_STATUS_RANK[nextStatus] >= ACTIONBRIDGE_ERROR_STATUS_RANK[currentStatus];
+}
+
 export function sanitizeActionBridgeErrorContext(value: unknown, depth = 0, seen = new WeakSet<object>()): unknown {
   if (value === null || value === undefined || typeof value === 'number' || typeof value === 'boolean') return value ?? null;
   if (typeof value === 'string') return value.length > ERROR_CONTEXT_LIMITS.maxStringLength ? `${value.slice(0, ERROR_CONTEXT_LIMITS.maxStringLength)}…[truncated]` : value;

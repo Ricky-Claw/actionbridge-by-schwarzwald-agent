@@ -121,15 +121,36 @@ for (const [label, pattern] of [
 }
 
 const errorsRoute = read('src/frontend/app/api/actionbridge/errors/route.ts');
+const errorLogSource = read('src/frontend/lib/actionbridge/error-log.ts');
 const statusUpdateIndex = errorsRoute.indexOf(".update({");
 const statusPredicateIndex = errorsRoute.indexOf(".eq('status', currentStatus)");
 if (statusUpdateIndex > 0 && statusPredicateIndex > statusUpdateIndex) pass('error lifecycle route uses compare-and-set status predicate after update builder');
 else fail('error lifecycle route compare-and-set predicate missing or misplaced');
 
-const transitionSnippet = errorsRoute.slice(errorsRoute.indexOf('const allowed ='), errorsRoute.indexOf('if (!allowed)'));
-for (const token of ["currentStatus === 'open'", "nextStatus === 'acknowledged'", "nextStatus === 'resolved'", "currentStatus === 'acknowledged'", 'currentStatus === nextStatus']) {
-  if (transitionSnippet.includes(token)) pass(`error lifecycle transition token: ${token}`);
-  else fail(`error lifecycle transition token missing: ${token}`);
+for (const token of ['normalizeActionBridgeErrorStatus(existing.status)', 'canTransitionActionBridgeErrorStatus(currentStatus, nextStatus)', "ACTIONBRIDGE_ERROR_STATUS_TRANSITION_BLOCKED", ".eq('user_id', user!.id)", ".eq('id', errorId)", ".eq('status', currentStatus)"]) {
+  if (errorsRoute.includes(token)) pass(`error lifecycle route race guard token: ${token}`);
+  else fail(`error lifecycle route race guard token missing: ${token}`);
+}
+
+const rankSnippet = errorLogSource.slice(errorLogSource.indexOf('const ACTIONBRIDGE_ERROR_STATUS_RANK'), errorLogSource.indexOf('export function sanitizeActionBridgeErrorContext'));
+for (const token of ['open: 0', 'acknowledged: 1', 'resolved: 2', 'canTransitionActionBridgeErrorStatus', '>=']) {
+  if (rankSnippet.includes(token)) pass(`error lifecycle monotonic transition token: ${token}`);
+  else fail(`error lifecycle monotonic transition token missing: ${token}`);
+}
+
+const raceRows = new Map([['err-race', { status: 'open' }]]);
+function compareAndSetStatus(id, observedStatus, nextStatus) {
+  const row = raceRows.get(id);
+  if (!row || row.status !== observedStatus) return false;
+  row.status = nextStatus;
+  return true;
+}
+const firstWriter = compareAndSetStatus('err-race', 'open', 'resolved');
+const staleDowngradeWriter = compareAndSetStatus('err-race', 'open', 'acknowledged');
+if (firstWriter === true && staleDowngradeWriter === false && raceRows.get('err-race').status === 'resolved') {
+  pass('error lifecycle race proof: stale acknowledged update cannot downgrade resolved state');
+} else {
+  fail('error lifecycle race proof: stale acknowledged update downgraded or CAS did not hold');
 }
 
 process.exitCode = failed ? 1 : 0;

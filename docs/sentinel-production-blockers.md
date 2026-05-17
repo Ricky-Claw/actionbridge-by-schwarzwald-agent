@@ -28,7 +28,7 @@ Required proof:
 - [ ] endpoint path rejection behavior; _spec-model coverage added; production route/import coverage still required_
 - [ ] webhook timeout/non-2xx persistence; _spec-model coverage added; production route/persistence coverage still required_
 - [x] unresolved signing ref blocks before network; _spec-model plus execute-route source-order proof added: unresolved signing blocks before throttle/delivery branch_
-- [ ] error lifecycle race cannot downgrade state;
+- [x] error lifecycle race cannot downgrade state. _Route uses monotonic status transitions plus compare-and-set `status=currentStatus`; behavioral proof covers stale open→acknowledged losing after open→resolved._
 - [x] visibility routes never expose raw secrets. _Runtime sanitizer proof now covers nested sensitive values plus audit/execution route sanitizer usage._
 
 ## Blocker 4 — Secret Management / Rotation

@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createCoreServiceClient } from '@/lib/core/service-client';
 import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
-import { normalizeActionBridgeErrorCategory, normalizeActionBridgeErrorSeverity, normalizeActionBridgeErrorStatus, pruneActionBridgeResolvedErrorLogs, toActionBridgeErrorLogView } from '@/lib/actionbridge/error-log';
+import { canTransitionActionBridgeErrorStatus, normalizeActionBridgeErrorCategory, normalizeActionBridgeErrorSeverity, normalizeActionBridgeErrorStatus, pruneActionBridgeResolvedErrorLogs, toActionBridgeErrorLogView } from '@/lib/actionbridge/error-log';
 
 async function requireActionBridgeUser() {
   const supabase = await createClient();
@@ -107,11 +107,10 @@ export async function PATCH(request: NextRequest) {
     .maybeSingle();
   if (!existing) return NextResponse.json({ error: 'ACTIONBRIDGE_ERROR_LOG_NOT_FOUND' }, { status: 404 });
 
-  const currentStatus = existing.status;
-  const allowed = (currentStatus === 'open' && (nextStatus === 'acknowledged' || nextStatus === 'resolved'))
-    || (currentStatus === 'acknowledged' && nextStatus === 'resolved')
-    || currentStatus === nextStatus;
-  if (!allowed) return NextResponse.json({ error: 'ACTIONBRIDGE_ERROR_STATUS_TRANSITION_BLOCKED' }, { status: 409 });
+  const currentStatus = normalizeActionBridgeErrorStatus(existing.status);
+  if (!currentStatus || !canTransitionActionBridgeErrorStatus(currentStatus, nextStatus)) {
+    return NextResponse.json({ error: 'ACTIONBRIDGE_ERROR_STATUS_TRANSITION_BLOCKED' }, { status: 409 });
+  }
 
   const serviceSupabase = createCoreServiceClient();
   if (!serviceSupabase) return NextResponse.json({ error: 'ACTIONBRIDGE_ERROR_STATUS_UPDATE_FAILED' }, { status: 503 });

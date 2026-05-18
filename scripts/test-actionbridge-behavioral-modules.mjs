@@ -101,6 +101,26 @@ for (const [label, input, expected] of [
   else fail(`validateActionBridgeWebhookEndpointPath: ${label}`, `expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
 }
 
+const connectorRouteSource = read('src/frontend/app/api/actionbridge/connectors/route.ts');
+for (const [label, pattern] of [
+  ['connector POST rejects unsafe endpoint paths with 400 before insert', /const draft = parseActionBridgeConnectorDraft\(bodyObject\)[\s\S]*if \(!draft\) \{[\s\S]*INVALID_ACTIONBRIDGE_CONNECTOR[\s\S]*status: 400[\s\S]*\.insert\(\{/],
+  ['connector draft uses only server-normalized endpoint_path for webhook connectors', /const endpointPath = type === 'webhook'[\s\S]*normalizeActionBridgeWebhookEndpointPath\(body\.endpointPath \?\? body\.endpoint_path\)[\s\S]*endpoint_path: endpointPath/],
+]) {
+  if (pattern.test(connectorRouteSource)) pass(`connector route endpoint path behavior: ${label}`);
+  else fail(`connector route endpoint path behavior: ${label}`);
+}
+
+const endpointPathMigration = read('supabase/migrations/20260515230500_actionbridge_webhook_endpoint_path.sql');
+for (const [label, predicate] of [
+  ['DB constraint requires leading slash', () => endpointPathMigration.includes("ADD CONSTRAINT actionbridge_connectors_endpoint_path_relative") && endpointPathMigration.includes("endpoint_path LIKE '/%'")],
+  ['DB constraint rejects scheme-relative paths', () => endpointPathMigration.includes("endpoint_path NOT LIKE '//%'")],
+  ['DB constraint rejects absolute URL schemes', () => endpointPathMigration.includes("endpoint_path !~ '^[A-Za-z][A-Za-z0-9+.-]*:'")],
+  ['DB constraint rejects backslashes, query strings, and fragments', () => endpointPathMigration.includes("endpoint_path !~ '\\\\\\\\'") && endpointPathMigration.includes("endpoint_path NOT LIKE '%?%'") && endpointPathMigration.includes("endpoint_path NOT LIKE '%#%'")],
+]) {
+  if (predicate()) pass(`endpoint_path database constraint behavior: ${label}`);
+  else fail(`endpoint_path database constraint behavior: ${label}`);
+}
+
 for (const [label, pattern] of [
   ['delivery validates endpoint path before target validation', /const pathDecision = validateActionBridgeWebhookEndpointPath\(input\.path\)[\s\S]*networkExecution: false[\s\S]*const path = pathDecision\.path[\s\S]*validateActionBridgeTarget/],
   ['delivery no longer strips query or fragment from unsafe paths', /candidate\.includes\('\?'\) \|\| candidate\.includes\('#'\)/],

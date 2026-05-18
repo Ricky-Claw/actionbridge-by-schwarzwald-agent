@@ -25,7 +25,7 @@ Still required proof before production:
 Marker tests are not enough for production.
 
 Required proof:
-- [ ] endpoint path rejection behavior; _spec-model coverage added; production route/import coverage still required_
+- [x] endpoint path rejection behavior; _Behavioral module now covers connector-route normalizer cases, POST fail-closed-before-insert source order, delivery helper validation, and DB constraint defense-in-depth._
 - [x] webhook timeout/non-2xx persistence; _execute-route source-order proof plus behavioral persistence simulation covers failed execution/error event recording for non-2xx and timeout-safe summaries._
 - [x] unresolved signing ref blocks before network; _spec-model plus execute-route source-order proof added: unresolved signing blocks before throttle/delivery branch_
 - [x] error lifecycle race cannot downgrade state. _Route uses monotonic status transitions plus compare-and-set `status=currentStatus`; behavioral proof covers stale open→acknowledged losing after open→resolved._

@@ -22,9 +22,9 @@ Behavioral cases:
 
 Expected proof:
 - connector route path normalizer rejects unsafe paths; **covered by `test:behavioral-modules`**;
-- connector creation returns 400 for rejected paths;
-- DB constraint rejects unsafe paths as defense-in-depth;
-- execute route never reads caller-supplied body path for webhook delivery.
+- connector creation returns 400 for rejected paths before insert; **covered by `test:behavioral-modules` source-order proof**;
+- DB constraint rejects unsafe paths as defense-in-depth; **covered by `test:behavioral-modules` migration proof**;
+- execute route never reads caller-supplied body path for webhook delivery. **covered by execute-route source proof using stored connector `endpoint_path`**
 
 ## Priority 2 — Webhook Delivery Failure Semantics
 Behavioral cases:

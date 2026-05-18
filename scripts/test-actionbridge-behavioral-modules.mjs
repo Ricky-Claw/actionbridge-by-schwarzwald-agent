@@ -207,6 +207,76 @@ for (const [label, pattern] of [
   else fail(`webhook quarantine source behavior: ${label}`);
 }
 
+function redactQuarantineValue(value) {
+  return JSON.parse(JSON.stringify(value).replace(/Bearer [A-Za-z0-9._-]+/g, 'Bearer [REDACTED_TOKEN]').replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[REDACTED_EMAIL]'));
+}
+
+function simulateDurableWebhookQuarantineFlow({ initialRows = [], failureCount = 3, existingActive = false, lookupError = false }) {
+  const rows = new Map(initialRows.map((row) => [row.connector_id, { ...row }]));
+  const connectorId = 'conn-webhook-1';
+  const userId = 'user-1';
+  if (existingActive) {
+    rows.set(connectorId, {
+      id: 'quarantine-existing',
+      user_id: userId,
+      connector_id: connectorId,
+      status: 'active',
+      failure_count: 2,
+      redacted_context: {},
+    });
+  }
+  if (lookupError) {
+    return { networkExecution: false, delivered: false, errorCode: 'ACTIONBRIDGE_CONNECTOR_QUARANTINE_LOOKUP_FAILED' };
+  }
+  const activeBeforeDelivery = rows.get(connectorId)?.status === 'active';
+  if (activeBeforeDelivery) {
+    return { networkExecution: false, delivered: false, status: 'webhook_connector_quarantined', quarantine: rows.get(connectorId) };
+  }
+  const context = redactQuarantineValue({ receiver: 'ops@example.test', authorization: 'Bearer secret-token-1234567890' });
+  rows.set(connectorId, {
+    id: 'quarantine-new',
+    user_id: userId,
+    connector_id: connectorId,
+    status: 'active',
+    reason_code: 'webhook_repeated_failures',
+    message: 'Webhook-v1 delivery is paused after repeated pilot failures. Review receiver health before resuming.',
+    failure_count: Math.max(1, Math.min(10_000, failureCount)),
+    redacted_context: context,
+  });
+  return { networkExecution: true, delivered: true, status: 'quarantine_required', quarantine: rows.get(connectorId), rows };
+}
+
+const quarantineCreation = simulateDurableWebhookQuarantineFlow({ failureCount: 4 });
+if (quarantineCreation.delivered === true
+  && quarantineCreation.quarantine.status === 'active'
+  && quarantineCreation.quarantine.reason_code === 'webhook_repeated_failures'
+  && quarantineCreation.quarantine.failure_count === 4
+  && !JSON.stringify(quarantineCreation.quarantine.redacted_context).includes('ops@example.test')
+  && !JSON.stringify(quarantineCreation.quarantine.redacted_context).includes('secret-token')) {
+  pass('webhook quarantine behavior: repeated failures persist active redacted quarantine');
+} else {
+  fail('webhook quarantine behavior: repeated failures did not persist safe active quarantine', JSON.stringify(quarantineCreation));
+}
+
+const quarantineBlocksDelivery = simulateDurableWebhookQuarantineFlow({ existingActive: true });
+if (quarantineBlocksDelivery.networkExecution === false
+  && quarantineBlocksDelivery.delivered === false
+  && quarantineBlocksDelivery.status === 'webhook_connector_quarantined'
+  && quarantineBlocksDelivery.quarantine.connector_id === 'conn-webhook-1') {
+  pass('webhook quarantine behavior: active durable quarantine blocks delivery before network');
+} else {
+  fail('webhook quarantine behavior: active durable quarantine did not block delivery', JSON.stringify(quarantineBlocksDelivery));
+}
+
+const quarantineLookupFailure = simulateDurableWebhookQuarantineFlow({ lookupError: true });
+if (quarantineLookupFailure.networkExecution === false
+  && quarantineLookupFailure.delivered === false
+  && quarantineLookupFailure.errorCode === 'ACTIONBRIDGE_CONNECTOR_QUARANTINE_LOOKUP_FAILED') {
+  pass('webhook quarantine behavior: quarantine lookup failure fails closed before network');
+} else {
+  fail('webhook quarantine behavior: lookup failure did not fail closed', JSON.stringify(quarantineLookupFailure));
+}
+
 const errorsRoute = read('src/frontend/app/api/actionbridge/errors/route.ts');
 const errorLogSource = read('src/frontend/lib/actionbridge/error-log.ts');
 const statusUpdateIndex = errorsRoute.indexOf(".update({");

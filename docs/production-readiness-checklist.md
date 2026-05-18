@@ -33,6 +33,7 @@ ActionBridge is suitable for controlled pilot continuation only. This checklist 
 - [ ] Distributed atomic rate limiter.
 - [x] Trusted proxy/header fail-closed enforcement for production mode.
 - [x] Durable connector pause/quarantine operator API.
+- [x] Durable quarantine behavioral proof for repeated-failure persistence and pre-network delivery block.
 - [ ] Cross-instance/concurrency tests.
 
 ## Gate 4 — Observability and Operations

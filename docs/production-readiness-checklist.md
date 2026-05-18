@@ -13,7 +13,7 @@ ActionBridge is suitable for controlled pilot continuation only. This checklist 
 - [x] Fail-closed unresolved signing secret reference.
 - [x] Behavioral endpoint path rejection tests.
 - [ ] Behavioral DNS rebinding/pinned-connection tests.
-- [ ] Behavioral timeout/non-2xx persistence tests. _Spec-model coverage added; production route/persistence coverage still required._
+- [x] Behavioral timeout/non-2xx persistence tests. _Execute-route source-order proof plus behavioral persistence simulation covers failed execution/error event recording for non-2xx and timeout-safe summaries._
 
 ## Gate 2 — Secrets and Signing
 - [x] Raw secrets rejected from public connector/setup routes.

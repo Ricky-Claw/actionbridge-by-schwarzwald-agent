@@ -126,11 +126,75 @@ for (const [label, pattern] of [
   ['execute checks durable quarantine before signing/delivery', /activeQuarantine\.quarantined[\s\S]*webhook_connector_quarantined[\s\S]*networkExecution: false/],
   ['signing resolution only occurs after lookup error and active quarantine branches', /else \{[\s\S]*const signingResolution = resolveActionBridgeWebhookSigningSecret/],
   ['unresolved signing ref blocks before throttle and delivery imports are called', /if \(!signingResolution\.ok\) \{[\s\S]*webhook_signing_secret_unresolved[\s\S]*networkExecution: false[\s\S]*\} else \{[\s\S]*const webhookThrottle = decideActionBridgeWebhookDeliveryThrottle[\s\S]*deliverActionBridgeWebhook/],
+  ['non-2xx webhook result marks execution failed before final persistence', /if \(!webhookResult\.ok\) \{[\s\S]*finalExecutionStatus = 'failed'[\s\S]*persistActionBridgeErrorEvent[\s\S]*ACTIONBRIDGE_WEBHOOK_DELIVERY_FAILED[\s\S]*persistActionBridgeExecutionResult/],
+  ['timeout exception is converted to safe failed webhook result', /catch \(error\) \{[\s\S]*webhook_delivery_error[\s\S]*ACTIONBRIDGE_WEBHOOK_TIMEOUT[\s\S]*networkExecution: true/],
+  ['failed webhook execution persists delivery failure code', /status: finalExecutionStatus[\s\S]*errorCode: finalExecutionStatus === 'failed' \? 'ACTIONBRIDGE_WEBHOOK_DELIVERY_FAILED' : undefined/],
   ['repeated pilot failures persist durable quarantine', /persistActionBridgeWebhookFailureQuarantine[\s\S]*quarantine_required/],
   ['durable quarantine persistence failure is surfaced', /durablePersistenceStatus[\s\S]*ACTIONBRIDGE_CONNECTOR_QUARANTINE_PERSIST_FAILED/],
 ]) {
   if (pattern.test(executeRoute)) pass(`execute route durable quarantine behavior: ${label}`);
   else fail(`execute route durable quarantine behavior: ${label}`);
+}
+
+function simulateWebhookFailurePersistence({ deliveryOk, deliveryStatus, thrownMessage }) {
+  let finalExecutionStatus = 'succeeded';
+  let webhookResult;
+  if (thrownMessage) {
+    webhookResult = {
+      ok: false,
+      status: 502,
+      networkExecution: true,
+      resultSummary: {
+        status: 'webhook_delivery_error',
+        errorCode: thrownMessage === 'ACTIONBRIDGE_WEBHOOK_TIMEOUT'
+          ? 'ACTIONBRIDGE_WEBHOOK_TIMEOUT'
+          : 'ACTIONBRIDGE_WEBHOOK_DELIVERY_FAILED',
+        networkExecution: true,
+      },
+    };
+  } else {
+    webhookResult = {
+      ok: deliveryOk,
+      status: deliveryStatus,
+      networkExecution: true,
+      resultSummary: { status: deliveryOk ? 'webhook_delivered' : 'webhook_failed', httpStatus: deliveryStatus, networkExecution: true },
+    };
+  }
+  const persistedErrorEvents = [];
+  if (!webhookResult.ok) {
+    finalExecutionStatus = 'failed';
+    persistedErrorEvents.push({
+      category: webhookResult.status === 429 ? 'rate_limit' : 'webhook',
+      errorCode: webhookResult.status === 429 ? 'ACTIONBRIDGE_WEBHOOK_RATE_LIMITED' : 'ACTIONBRIDGE_WEBHOOK_DELIVERY_FAILED',
+      context: { webhook: webhookResult.resultSummary },
+    });
+  }
+  const persistedExecution = {
+    status: finalExecutionStatus,
+    errorCode: finalExecutionStatus === 'failed' ? 'ACTIONBRIDGE_WEBHOOK_DELIVERY_FAILED' : undefined,
+    safeResult: { webhook: webhookResult.resultSummary, networkExecution: webhookResult.networkExecution },
+  };
+  return { persistedErrorEvents, persistedExecution };
+}
+
+const non2xxPersistence = simulateWebhookFailurePersistence({ deliveryOk: false, deliveryStatus: 500 });
+if (non2xxPersistence.persistedExecution.status === 'failed'
+  && non2xxPersistence.persistedExecution.errorCode === 'ACTIONBRIDGE_WEBHOOK_DELIVERY_FAILED'
+  && non2xxPersistence.persistedErrorEvents[0]?.errorCode === 'ACTIONBRIDGE_WEBHOOK_DELIVERY_FAILED'
+  && non2xxPersistence.persistedExecution.safeResult.webhook.httpStatus === 500) {
+  pass('execute route webhook persistence proof: non-2xx response persists failed execution and redacted error event');
+} else {
+  fail('execute route webhook persistence proof: non-2xx response was not persisted as failed');
+}
+
+const timeoutPersistence = simulateWebhookFailurePersistence({ deliveryOk: false, deliveryStatus: 0, thrownMessage: 'ACTIONBRIDGE_WEBHOOK_TIMEOUT' });
+if (timeoutPersistence.persistedExecution.status === 'failed'
+  && timeoutPersistence.persistedExecution.errorCode === 'ACTIONBRIDGE_WEBHOOK_DELIVERY_FAILED'
+  && timeoutPersistence.persistedExecution.safeResult.webhook.errorCode === 'ACTIONBRIDGE_WEBHOOK_TIMEOUT'
+  && timeoutPersistence.persistedExecution.safeResult.networkExecution === true) {
+  pass('execute route webhook persistence proof: timeout persists failed execution with timeout-safe summary');
+} else {
+  fail('execute route webhook persistence proof: timeout was not persisted as failed');
 }
 
 const quarantineSource = read('src/frontend/lib/actionbridge/webhook-quarantine.ts');

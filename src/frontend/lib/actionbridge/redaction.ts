@@ -20,6 +20,11 @@ const SENSITIVE_KEYS = [
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 const IBAN_PATTERN = /\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b/gi;
 const PHONE_PATTERN = /(?<!\w)(?:\+\d{1,3}[\s./-]?)?(?:\(?\d{2,5}\)?[\s./-]?){2,}\d{2,}(?!\w)/g;
+const AUTH_HEADER_PATTERN = /\b(authorization\s*[:=]\s*)(bearer|basic|token)\s+[A-Z0-9._~+/-]+=*/gi;
+const BEARER_TOKEN_PATTERN = /\b(bearer\s+)[A-Z0-9._~+/-]{16,}=*/gi;
+const JWT_PATTERN = /\beyJ[A-Z0-9_-]{8,}\.[A-Z0-9_-]{8,}\.[A-Z0-9_-]{8,}\b/gi;
+const QUERY_SECRET_PATTERN = /\b(api[_-]?key|access[_-]?token|refresh[_-]?token|auth[_-]?token|idempotency[_-]?key|client[_-]?secret|secret|password|token)(=)[^\s&?#,;]+/gi;
+const COMMON_SECRET_PATTERN = /\b(sk|pk|rk|ghp|gho|ghu|ghs|glpat|xoxb|xoxp)-[A-Z0-9_\-]{12,}\b/gi;
 
 function normalizeKey(key: string): string {
   return key.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -44,6 +49,11 @@ export function redactActionBridgeValue(value: unknown): unknown {
 
   if (typeof value === 'string') {
     return value
+      .replace(AUTH_HEADER_PATTERN, '$1[REDACTED_AUTH]')
+      .replace(BEARER_TOKEN_PATTERN, '$1[REDACTED_TOKEN]')
+      .replace(JWT_PATTERN, '[REDACTED_JWT]')
+      .replace(QUERY_SECRET_PATTERN, '$1$2[REDACTED_SECRET]')
+      .replace(COMMON_SECRET_PATTERN, '[REDACTED_SECRET]')
       .replace(EMAIL_PATTERN, '[REDACTED_EMAIL]')
       .replace(IBAN_PATTERN, '[REDACTED_IBAN]')
       .replace(PHONE_PATTERN, '[REDACTED_PHONE]');

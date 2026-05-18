@@ -55,6 +55,29 @@ runExtractedFunction('src/frontend/app/api/actionbridge/connectors/route.ts', 'n
   ['backslash rejected fail-closed', '/hook\\evil', null],
 ]);
 
+const redactionSource = read('src/frontend/lib/actionbridge/redaction.ts')
+  .replace(/export /g, '')
+  .replace(/key: string/g, 'key')
+  .replace(/: string/g, '')
+  .replace(/value: unknown/g, 'value')
+  .replace(/: unknown/g, '')
+  .replace(/: boolean/g, '')
+  .replace(/value as Record<string, unknown>/g, 'value');
+const redactionContext = {};
+vm.createContext(redactionContext);
+vm.runInContext(`${redactionSource}; globalThis.__redact = redactActionBridgeValue;`, redactionContext);
+for (const [label, input, expected] of [
+  ['authorization header is redacted', 'Authorization: Bearer abcdefghijklmnopqrstuvwxyz123456', 'Authorization: [REDACTED_AUTH]'],
+  ['standalone bearer token is redacted', 'failed with bearer abcdefghijklmnopqrstuvwxyz123456', 'failed with bearer [REDACTED_TOKEN]'],
+  ['jwt is redacted', 'jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.signaturePart', 'jwt [REDACTED_JWT]'],
+  ['query api key is redacted', 'callback failed https://example.test/hook?api_key=supersecret123&ok=1', 'callback failed https://example.test/hook?api_key=[REDACTED_SECRET]&ok=1'],
+  ['common provider key is redacted', 'provider returned sk-abcdefghijklmnopqrstuvwxyz', 'provider returned [REDACTED_SECRET]'],
+]) {
+  const actual = redactionContext.__redact(input);
+  if (actual === expected) pass(`redactActionBridgeValue free-text credential: ${label}`, `=> ${actual}`);
+  else fail(`redactActionBridgeValue free-text credential: ${label}`, `expected ${expected}, got ${actual}`);
+}
+
 const webhookDeliverySource = read('src/frontend/lib/actionbridge/webhook-delivery.ts');
 const webhookPathFnSource = extractFunction(webhookDeliverySource, 'validateActionBridgeWebhookEndpointPath')
   .replace(/: string \| undefined/g, '')

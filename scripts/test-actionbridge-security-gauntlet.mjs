@@ -140,6 +140,10 @@ for (const token of ['email', 'phone', 'contact', 'address', 'iban', 'vatId', 'E
   if (redaction.includes(token)) pass(`GDPR redaction marker: ${token}`);
   else fail(`GDPR redaction missing marker: ${token}`);
 }
+for (const token of ['AUTH_HEADER_PATTERN', 'BEARER_TOKEN_PATTERN', 'JWT_PATTERN', 'QUERY_SECRET_PATTERN', 'COMMON_SECRET_PATTERN', '[REDACTED_AUTH]', '[REDACTED_TOKEN]', '[REDACTED_JWT]', '[REDACTED_SECRET]']) {
+  if (redaction.includes(token)) pass(`free-text credential redaction marker: ${token}`);
+  else fail(`free-text credential redaction missing marker: ${token}`);
+}
 
 const sourceFiles = [
   'src/frontend/lib/actionbridge/http-connector.ts',

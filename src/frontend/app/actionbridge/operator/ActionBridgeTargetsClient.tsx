@@ -103,6 +103,22 @@ export default function ActionBridgeTargetsClient() {
     setState({ status: 'success', message: `${body.targets?.length || 0} Targets registriert/aktualisiert. Duplicates: ${body.duplicates?.length || 0}.` });
   }
 
+  async function runLiveCheck(target: ActionBridgeTargetView) {
+    setState({ status: 'loading', message: `${target.hostname}: Live Check läuft …` });
+    const response = await fetch('/api/actionbridge/targets', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ providerId: 'schwarzwald-agent', tenantId, targetId: target.id }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setState({ status: 'error', message: typeof body.error === 'string' ? body.error : 'ACTIONBRIDGE_TARGET_LIVE_CHECK_FAILED' });
+      return;
+    }
+    setTargets((current) => current.map((entry) => entry.id === target.id ? body.target : entry));
+    setState({ status: 'success', message: `${target.hostname}: ${body.target.connectionStatus} via bounded Live Check.` });
+  }
+
   async function markTarget(target: ActionBridgeTargetView, mode: 'connected' | 'missing_script' | 'unverified') {
     setState({ status: 'loading', message: `${target.hostname} wird aktualisiert …` });
     const payload = mode === 'connected'
@@ -193,6 +209,7 @@ export default function ActionBridgeTargetsClient() {
                     <span>Tenant: {target.tenantId}</span>
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
+                    <button type="button" onClick={() => runLiveCheck(target)} className="rounded-xl border border-cyan-300/30 px-3 py-2 text-xs font-bold text-cyan-100">Live Check</button>
                     <button type="button" onClick={() => markTarget(target, 'connected')} className="rounded-xl border border-emerald-300/30 px-3 py-2 text-xs font-bold text-emerald-100">als verbunden markieren</button>
                     <button type="button" onClick={() => markTarget(target, 'missing_script')} className="rounded-xl border border-rose-300/30 px-3 py-2 text-xs font-bold text-rose-100">kein Script</button>
                     <button type="button" onClick={() => markTarget(target, 'unverified')} className="rounded-xl border border-amber-300/30 px-3 py-2 text-xs font-bold text-amber-100">unverified</button>

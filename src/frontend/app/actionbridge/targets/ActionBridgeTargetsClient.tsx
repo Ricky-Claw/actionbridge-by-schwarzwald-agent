@@ -54,6 +54,28 @@ export default function ActionBridgeTargetsClient() {
     }
   }
 
+  async function runLiveCheck(target: TargetView) {
+    setBusy(true);
+    try {
+      const response = await fetch('/api/actionbridge/targets', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenantId, targetId: target.id }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setStatus(typeof body.error === 'string' ? body.error : 'ACTIONBRIDGE_TARGET_LIVE_CHECK_FAILED');
+        return;
+      }
+      setTargets((current) => current.map((entry) => entry.id === target.id ? body.target : entry));
+      setStatus(`${target.hostname}: ${body.target?.connectionStatus || 'checked'} via bounded Live Check.`);
+    } catch {
+      setStatus('Could not run ActionBridge Live Check.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function submitTargets() {
     const list = urls.split(/\n|,/).map((item) => item.trim()).filter(Boolean);
     if (!list.length) {
@@ -108,6 +130,7 @@ export default function ActionBridgeTargetsClient() {
               <div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold text-slate-50">{target.hostname}</h2><p className="mt-1 break-all text-sm text-slate-400">{target.url}</p></div><span className={`rounded-full border px-3 py-1 text-xs ${statusTone[target.connectionStatus] || statusTone.pending}`}>{target.connectionStatus}</span></div>
               <dl className="mt-5 grid grid-cols-2 gap-3 text-sm"><div><dt className="text-slate-500">Ownership</dt><dd>{target.ownershipStatus}</dd></div><div><dt className="text-slate-500">Script</dt><dd>{target.scriptStatus}</dd></div></dl>
               <p className="mt-4 text-xs text-slate-500">Capabilities: {target.capabilities.join(', ')}</p>
+              <button disabled={busy} onClick={() => runLiveCheck(target)} className="mt-4 rounded-2xl border border-cyan-300/30 px-4 py-2 text-sm font-semibold text-cyan-100 disabled:opacity-50">Live Check</button>
             </article>
           ))}
           {!targets.length && <div className="rounded-3xl border border-dashed border-slate-700 p-8 text-slate-400">No targets returned for this tenant/user scope.</div>}

@@ -145,13 +145,22 @@ for (const token of [
   'ACTIONBRIDGE_TARGET_TENANT_REQUIRED',
   'enforceActionBridgeRateLimit',
   'createActionBridgeRateLimitHeaders',
+  'export async function PUT',
+  'fetch(target.url',
+  'AbortSignal.timeout(5000)',
+  'ACTIONBRIDGE_TARGET_LIVE_CHECK_FAILED',
+  'bridge.schwarzwald-agent.de/bridge.js',
+  'body.slice(0, 250_000)',
+  'decideActionBridgeDnsPinning',
+  'dns.lookup(target.hostname',
+  "redirect: 'manual'",
 ]) {
   if (!routeSource.includes(token)) fail(`targets API route missing ${token}`);
 }
 for (const forbidden of ['http://', 'secret_ref', 'token_digest', 'document.cookie', 'localStorage']) {
   if (routeSource.includes(forbidden)) fail(`targets API route must not expose unsafe primitive: ${forbidden}`);
 }
-pass('Targets API route is auth-gated, tenant-scoped, registry-only, and non-networked');
+pass('Targets API route is auth-gated, tenant-scoped, registry-write-only, and live checks are bounded');
 
 for (const token of [
   '/api/actionbridge/targets',
@@ -160,6 +169,8 @@ for (const token of [
   'ActionBridge bleibt nur Connector-Core',
   'connectionStatus',
   'capabilities',
+  'Live Check',
+  'method: \'PUT\'',
 ]) {
   if (!uiSource.includes(token)) fail(`targets UI missing ${token}`);
 }

@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 
+import dns from 'node:dns/promises';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import {
@@ -10,6 +11,7 @@ import {
 } from '@/lib/actionbridge/multi-target-registry';
 import type { ActionBridgeTarget } from '@/lib/actionbridge/types';
 import { createActionBridgeRateLimitHeaders, enforceActionBridgeRateLimit } from '@/lib/actionbridge/rate-limit';
+import { decideActionBridgeDnsPinning } from '@/lib/actionbridge/dns-ip-guard';
 
 async function requireActionBridgeUser() {
   const supabase = await createClient();
@@ -65,6 +67,58 @@ function toActionBridgeTargetRow(target: ActionBridgeTarget) {
     created_at: target.createdAt,
     updated_at: target.updatedAt,
   };
+}
+
+function detectActionBridgeBridgeScript(input: { html: string; target: ActionBridgeTarget }) {
+  const body = input.html;
+  const boundedBody = body.slice(0, 250_000);
+  const expectedScript = `${input.target.bridgeOrigin}/bridge.js`;
+  const scriptFound = boundedBody.includes(expectedScript) || boundedBody.includes('bridge.schwarzwald-agent.de/bridge.js');
+  const targetBound = boundedBody.includes(`data-actionbridge-target="${input.target.id}"`) || boundedBody.includes(`data-actionbridge-target='${input.target.id}'`);
+  return {
+    scriptFound,
+    targetBound,
+    scriptStatus: scriptFound && targetBound ? 'connected' : scriptFound ? 'script_found_no_handshake' : 'missing_script',
+    connectionStatus: scriptFound && targetBound ? 'connected' : scriptFound ? 'pending' : 'missing_script',
+  };
+}
+
+async function runActionBridgeTargetLiveCheck(target: ActionBridgeTarget) {
+  try {
+    const addresses = await dns.lookup(target.hostname, { all: true, verbatim: true });
+    const dnsDecision = decideActionBridgeDnsPinning({
+      hostname: target.hostname,
+      addresses: addresses.map((entry) => ({ address: entry.address, family: entry.family === 6 ? 6 : 4 })),
+      networkExecution: false,
+    });
+    if (!dnsDecision.ok) {
+      return { ownershipStatus: 'pending', scriptStatus: 'unreachable', connectionStatus: 'unreachable', metadata: { networkExecution: false, error: 'ACTIONBRIDGE_TARGET_LIVE_CHECK_FAILED', reason: dnsDecision.reason } };
+    }
+
+    const response = await fetch(target.url, {
+      method: 'GET',
+      redirect: 'manual',
+      signal: AbortSignal.timeout(5000),
+      headers: { 'User-Agent': 'ActionBridge-Script-Check/1.0' },
+    });
+    if (!response.ok || response.status >= 300) {
+      return { ownershipStatus: 'pending', scriptStatus: 'unreachable', connectionStatus: 'unreachable', metadata: { networkExecution: 'bounded_get_only', httpStatus: response.status } };
+    }
+    const contentLength = Number(response.headers.get('content-length') || '0');
+    if (contentLength > 250_000) {
+      return { ownershipStatus: 'pending', scriptStatus: 'error', connectionStatus: 'error', metadata: { networkExecution: 'bounded_get_only', error: 'ACTIONBRIDGE_TARGET_LIVE_CHECK_FAILED', reason: 'response_too_large', contentLength } };
+    }
+    const body = await response.text();
+    const detection = detectActionBridgeBridgeScript({ html: body, target });
+    return {
+      ownershipStatus: detection.scriptStatus === 'connected' ? 'verified' : 'pending',
+      scriptStatus: detection.scriptStatus,
+      connectionStatus: detection.connectionStatus,
+      metadata: { networkExecution: 'bounded_get_only', checkedAt: new Date().toISOString(), httpStatus: response.status, scriptFound: detection.scriptFound, targetBound: detection.targetBound, maxBytesInspected: 250_000 },
+    };
+  } catch (error) {
+    return { ownershipStatus: 'pending', scriptStatus: 'unreachable', connectionStatus: 'unreachable', metadata: { networkExecution: 'bounded_get_only', error: 'ACTIONBRIDGE_TARGET_LIVE_CHECK_FAILED' } };
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -207,6 +261,55 @@ export async function PATCH(request: NextRequest) {
 
   if (error || !data) return NextResponse.json({ error: 'ACTIONBRIDGE_TARGET_UPDATE_FAILED' }, { status: 409 });
   return NextResponse.json({ version: 'actionbridge.targets.status.v1', target: toActionBridgeTarget(data), execution: { mode: 'status_update_only', networkExecution: false } }, {
+    headers: createActionBridgeRateLimitHeaders({ policyName: 'domainVerification', remaining: rateLimit.remaining, resetAt: rateLimit.resetAt }),
+  });
+}
+
+export async function PUT(request: NextRequest) {
+  const { supabase, user, response } = await requireActionBridgeUser();
+  if (response) return response;
+
+  const body = await request.json().catch(() => ({}));
+  const tenantId = safeTenantId(body.tenantId ?? body.tenant_id);
+  const targetId = typeof body.targetId === 'string' ? body.targetId : typeof body.target_id === 'string' ? body.target_id : '';
+  if (!tenantId) return NextResponse.json({ error: 'ACTIONBRIDGE_TARGET_TENANT_REQUIRED' }, { status: 400 });
+  if (!targetId) return NextResponse.json({ error: 'ACTIONBRIDGE_TARGET_ID_REQUIRED' }, { status: 400 });
+
+  const providerId = ACTIONBRIDGE_DEFAULT_PROVIDER_ID;
+  const rateLimit = enforceActionBridgeRateLimit({ request, policyName: 'domainVerification', discriminator: `${providerId}|${tenantId}|targets:live-check` });
+  if (!rateLimit.ok) return rateLimit.response!;
+
+  const { data: row, error: readError } = await (supabase as any)
+    .from('actionbridge_targets')
+    .select('id,provider_id,tenant_id,owner_user_id,url,origin,hostname,bridge_origin,ownership_status,script_status,connection_status,capabilities,status_metadata,created_at,updated_at')
+    .eq('id', targetId)
+    .eq('owner_user_id', user!.id)
+    .eq('provider_id', providerId)
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+
+  if (readError || !row) return NextResponse.json({ error: 'ACTIONBRIDGE_TARGET_NOT_FOUND' }, { status: 404 });
+
+  const target = toActionBridgeTarget(row);
+  const liveCheck = await runActionBridgeTargetLiveCheck(target);
+  const { data, error } = await (supabase as any)
+    .from('actionbridge_targets')
+    .update({
+      ownership_status: liveCheck.ownershipStatus,
+      script_status: liveCheck.scriptStatus,
+      connection_status: liveCheck.connectionStatus,
+      status_metadata: liveCheck.metadata,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', targetId)
+    .eq('owner_user_id', user!.id)
+    .eq('provider_id', providerId)
+    .eq('tenant_id', tenantId)
+    .select('id,provider_id,tenant_id,owner_user_id,url,origin,hostname,bridge_origin,ownership_status,script_status,connection_status,capabilities,status_metadata,created_at,updated_at')
+    .single();
+
+  if (error || !data) return NextResponse.json({ error: 'ACTIONBRIDGE_TARGET_LIVE_CHECK_FAILED' }, { status: 409 });
+  return NextResponse.json({ version: 'actionbridge.targets.live_check.v1', target: toActionBridgeTarget(data), execution: { mode: 'bounded_get_script_detection', networkExecution: true } }, {
     headers: createActionBridgeRateLimitHeaders({ policyName: 'domainVerification', remaining: rateLimit.remaining, resetAt: rateLimit.resetAt }),
   });
 }

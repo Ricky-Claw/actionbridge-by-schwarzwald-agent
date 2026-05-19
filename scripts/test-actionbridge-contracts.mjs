@@ -36,6 +36,7 @@ const requiredFiles = [
   'src/frontend/lib/actionbridge/setup-session.ts',
   'src/frontend/lib/actionbridge/bridge-handshake.ts',
   'src/frontend/lib/actionbridge/capability-rules.ts',
+  'src/frontend/lib/actionbridge/multi-target-registry.ts',
 ];
 
 for (const file of requiredFiles) {
@@ -211,6 +212,13 @@ if (!process.exitCode) {
   }
   if (!domainVerification.includes('isPrivateActionBridgeHost')) fail('domain verification must reject private/internal origins');
   if (!process.exitCode) pass('ActionBridge domain verification supports attestation, well-known, meta tag, and DNS TXT');
+
+  const multiTargetRegistry = read('src/frontend/lib/actionbridge/multi-target-registry.ts');
+  for (const token of ['ACTIONBRIDGE_ARCHIPEL_PILOT_URLS', 'https://bridge.schwarzwald-agent.de', 'createActionBridgeTargetsFromUrls', 'filterActionBridgeTargetsForTenant', 'createActionBridgeTargetToolCatalog', 'actionbridge.targets.list', 'actionbridge.target.status', 'networkExecution: false']) {
+    if (!multiTargetRegistry.includes(token)) fail(`multi-target-registry.ts missing ${token}`);
+  }
+  if (multiTargetRegistry.includes('fetch(') || multiTargetRegistry.includes('secret_ref') || multiTargetRegistry.includes('token_digest')) fail('multi-target registry must remain non-networked and secret-free');
+  if (!process.exitCode) pass('ActionBridge multi-target registry models tenant-scoped Archipel targets and read-only tools');
 
   const websiteConnector = read('src/frontend/lib/actionbridge/website-connector.ts');
   for (const token of ['server-only', 'createActionBridgeWebsiteExtractPlan', 'public_page_extract', 'same_origin_route_discovery', 'formInventory', 'no_form_submit', 'networkExecution: false', 'requiredExecutorGates', 'serverSideDnsPinning', 'robotsPolicy', 'browserNoWriteInterception', 'piiSecretRedaction', 'killSwitch']) {

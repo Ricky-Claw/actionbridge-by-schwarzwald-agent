@@ -374,7 +374,7 @@ if (!process.exitCode) {
   if (!connectorsRoute.includes('createActionBridgeEmbeddedSetupDescriptor')) fail('connectors route must expose embedded setup descriptor');
   if (!connectorsRoute.includes('embeddedSetup')) fail('connectors route must include embeddedSetup response field');
   if (!connectorsRoute.includes('webhook_signing_mode') || !connectorsRoute.includes('webhookSigningMode')) fail('connectors route must expose explicit webhook signing mode without secrets');
-  for (const token of ['actionbridge_targets', '.eq(\'owner_user_id\', user!.id)', '.eq(\'tenant_id\', tenantId)', 'createActionBridgeTargetsFromUrls', 'createActionBridgeTargetToolCatalog', 'networkExecution: false']) {
+  for (const token of ['actionbridge_targets', 'requireTenantMembership', 'actionbridge_tenant_memberships', '.eq(\'tenant_id\', tenantId)', 'createActionBridgeTargetsFromUrls', 'createActionBridgeTargetToolCatalog', 'networkExecution: false']) {
     if (!targetsRoute.includes(token)) fail(`targets route missing ${token}`);
   }
   if (!connectorsRoute.includes("new Set(['http', 'website', 'webhook', 'whatsapp_business'])")) fail('connectors route must allow website, webhook, and WhatsApp Business connector types');

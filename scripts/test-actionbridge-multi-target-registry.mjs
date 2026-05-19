@@ -136,7 +136,8 @@ pass('Target tool catalog is read-only and tenant scoped');
 for (const token of [
   'requireActionBridgeUser',
   "from('actionbridge_targets')",
-  ".eq('owner_user_id', user!.id)",
+  'requireTenantMembership',
+  'actionbridge_tenant_memberships',
   ".eq('provider_id', providerId)",
   ".eq('tenant_id', tenantId)",
   'createActionBridgeTargetsFromUrls',
@@ -146,14 +147,16 @@ for (const token of [
   'enforceActionBridgeRateLimit',
   'createActionBridgeRateLimitHeaders',
   'export async function PUT',
-  'fetch(target.url',
-  'AbortSignal.timeout(5000)',
+  'getPinnedHttpsText',
+  'https.request',
+  'timeout: input.timeoutMs',
   'ACTIONBRIDGE_TARGET_LIVE_CHECK_FAILED',
   'bridge.schwarzwald-agent.de/bridge.js',
-  'body.slice(0, 250_000)',
+  'input.html.slice(0, MAX_LIVE_CHECK_BYTES)',
   'decideActionBridgeDnsPinning',
   'dns.lookup(target.hostname',
-  "redirect: 'manual'",
+  'ActionBridge target redirect blocked.',
+  'ACTIONBRIDGE_MANUAL_TARGET_STATUS_DISABLED',
 ]) {
   if (!routeSource.includes(token)) fail(`targets API route missing ${token}`);
 }

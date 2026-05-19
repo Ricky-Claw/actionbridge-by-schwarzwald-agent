@@ -23,6 +23,7 @@ export interface PersistActionBridgeAuditEventInput extends ActionBridgePersiste
 
 export interface CreateActionBridgeApprovalInput extends ActionBridgePersistenceBase {
   decisionReason?: string | null;
+  actionSnapshot?: Record<string, unknown> | null;
 }
 
 export interface ConsumeApprovedActionBridgeExecutionInput {
@@ -81,6 +82,7 @@ export async function createActionBridgeApproval(
         riskLevel: input.riskLevel,
         redactedInput: redactActionBridgeValue(input.input),
         networkExecution: false,
+        ...(input.actionSnapshot || {}),
       },
       status: 'pending',
       decision_reason: input.decisionReason || null,
@@ -212,7 +214,7 @@ export async function persistActionBridgeExecutionResult(
       auditCode: input.status === 'succeeded'
         ? actionBridgeAuditTaxonomy.executionResultPersisted.code
         : actionBridgeAuditTaxonomy.executionPersistFailed.code,
-      networkExecution: false,
+      networkExecution: Boolean(row.safe_result?.networkExecution),
     },
   });
 

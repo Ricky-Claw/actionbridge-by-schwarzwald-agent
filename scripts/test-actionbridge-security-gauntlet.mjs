@@ -160,6 +160,7 @@ for (const file of sourceFiles) {
 }
 
 const executeRoute = read('src/frontend/app/api/actionbridge/execute/route.ts');
+const persistenceModule = read('src/frontend/lib/actionbridge/persistence.ts');
 if (executeRoute.includes('idempotencyKeyDigest') && !executeRoute.includes('idempotencyKey: consumed.execution.idempotencyKey')) pass('idempotency response redacts raw key');
 else fail('idempotency leak', 'raw key may be returned');
 if (executeRoute.includes('policy_check_succeeded_without_execution') && executeRoute.includes('networkExecution: false')) pass('execution status is explicitly non-network dry-run');
@@ -202,6 +203,18 @@ if (!webhookDelivery.includes('form.submit') && !webhookDelivery.includes('Steal
 else fail('webhook delivery unsafe primitive', 'webhook delivery must not use browser/form submit or caller supplied target');
 if (executeRoute.includes('deliverActionBridgeWebhook') && executeRoute.includes("webhookConnector?.type === 'webhook'") && executeRoute.includes('webhookDecision.allowed')) pass('execute route gates webhook delivery behind connector type and network controls');
 else fail('execute route webhook gate', 'webhook delivery must be gated by connector type and network execution controls');
+if (executeRoute.includes('approved_webhook_action') && executeRoute.includes('actionInput: approvalSnapshot.redactedInput')) pass('approved generic write actions can execute through webhook-v1 with approval snapshot payload');
+else fail('generic approved webhook action', 'approved write actions must deliver through webhook-v1 with the approval snapshot, not only lead.submit');
+for (const token of ['connectorExecutionDigest', 'createActionBridgeConnectorExecutionDigest', 'ACTIONBRIDGE_CONNECTOR_CHANGED_REAPPROVAL_REQUIRED', 'ACTIONBRIDGE_ACTION_CHANGED_REAPPROVAL_REQUIRED']) {
+  if (executeRoute.includes(token)) pass(`execute route approval snapshot integrity marker: ${token}`);
+  else fail(`execute route missing approval snapshot integrity marker: ${token}`);
+}
+if (executeRoute.includes("let finalExecutionStatus: 'succeeded' | 'failed' = consumed.execution.executionStatus === 'failed' ? 'failed' : 'succeeded'")) pass('reused failed executions return deny from stored failed status');
+else fail('reused failed execution status', 'idempotent retries must derive allow/deny from stored execution status');
+if (persistenceModule.includes('networkExecution: Boolean(row.safe_result?.networkExecution)')) pass('execution result audit preserves real networkExecution flag');
+else fail('execution result audit networkExecution', 'audit must not hard-code networkExecution: false for webhook execution results');
+if (executeRoute.includes("riskLevel === 'transactional'") || executeRoute.includes("riskLevel === 'destructive'")) pass('execute route explicitly blocks transactional/destructive live execution');
+else fail('transactional/destructive guard', 'live execution must explicitly block transactional/destructive risk levels');
 if (executeRoute.includes('endpoint_path') && executeRoute.includes("path: typeof webhookConnector.endpoint_path === 'string' ? webhookConnector.endpoint_path : '/'")) pass('execute route uses server-owned webhook endpoint path');
 else fail('execute route webhook gate', 'webhook delivery must be gated by connector type and network execution controls');
 for (const token of ['webhook_signing_secret_unresolved', 'webhook_signing_mode', 'resolveActionBridgeWebhookSigningSecret', 'signingSecret: signingResolution.signingSecret', 'webhook_delivery_error', 'ACTIONBRIDGE_WEBHOOK_DELIVERY_FAILED', 'decideActionBridgeWebhookDeliveryThrottle', 'webhook_rate_limited', 'recordActionBridgeWebhookFailureQuarantine', 'quarantine_required', "if (!webhookResult.ok)", "status: finalExecutionStatus", "finalExecutionStatus === 'failed' ? 502 : 200"]) {

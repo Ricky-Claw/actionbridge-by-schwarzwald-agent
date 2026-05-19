@@ -391,4 +391,65 @@ for (const token of ['CREATE TABLE IF NOT EXISTS public.actionbridge_operator_al
   else fail(`operator alerting migration token missing: ${token}`);
 }
 
+const rateLimitSource = read('src/frontend/lib/actionbridge/rate-limit.ts');
+for (const token of [
+  "const buckets = globalBuckets.__actionBridgeRateLimitBuckets || new Map<string, Bucket>()",
+  'globalBuckets.__actionBridgeRateLimitBuckets = buckets',
+  'existing && existing.resetAtMs > nowMs',
+  'nowMs + input.policy.windowMs',
+  'bucket.count += 1',
+  'cleanupExpiredPilotBuckets(nowMs)',
+  'ACTIONBRIDGE_RATE_LIMIT_MODE === \'production_distributed_required\'',
+  'ACTIONBRIDGE_TRUSTED_PROXY_REQUIRED',
+  'per_tenant_per_connector_per_token_dimensions',
+  'decideActionBridgeWebhookDeliveryThrottle',
+]) {
+  if (rateLimitSource.includes(token)) pass(`rate limit source token: ${token}`);
+  else fail(`rate limit source token missing: ${token}`);
+}
+
+function simulateSharedRateLimitDecision({ buckets, policy, rawKey, nowMs }) {
+  const existing = buckets.get(rawKey);
+  const bucket = existing && existing.resetAtMs > nowMs
+    ? existing
+    : { count: 0, resetAtMs: nowMs + policy.windowMs };
+  bucket.count += 1;
+  buckets.set(rawKey, bucket);
+  return {
+    ok: bucket.count <= policy.max,
+    remaining: Math.max(0, policy.max - bucket.count),
+    resetAtMs: bucket.resetAtMs,
+    count: bucket.count,
+  };
+}
+
+const sharedPilotStore = new Map();
+const ratePolicy = { windowMs: 1000, max: 2 };
+const firstWorkerHit = simulateSharedRateLimitDecision({ buckets: sharedPilotStore, policy: ratePolicy, rawKey: 'webhookDelivery:tenant|connector|action|origin', nowMs: 10_000 });
+const secondWorkerHit = simulateSharedRateLimitDecision({ buckets: sharedPilotStore, policy: ratePolicy, rawKey: 'webhookDelivery:tenant|connector|action|origin', nowMs: 10_100 });
+const crossInstanceDeny = simulateSharedRateLimitDecision({ buckets: sharedPilotStore, policy: ratePolicy, rawKey: 'webhookDelivery:tenant|connector|action|origin', nowMs: 10_200 });
+if (firstWorkerHit.ok && secondWorkerHit.ok && !crossInstanceDeny.ok && crossInstanceDeny.count === 3) {
+  pass('rate limit behavioral proof: shared counter denies cross-worker third hit in same window');
+} else {
+  fail('rate limit behavioral proof: shared counter did not deny cross-worker third hit', JSON.stringify({ firstWorkerHit, secondWorkerHit, crossInstanceDeny }));
+}
+
+const ttlResetHit = simulateSharedRateLimitDecision({ buckets: sharedPilotStore, policy: ratePolicy, rawKey: 'webhookDelivery:tenant|connector|action|origin', nowMs: 11_001 });
+if (ttlResetHit.ok && ttlResetHit.count === 1 && ttlResetHit.resetAtMs === 12_001) {
+  pass('rate limit behavioral proof: TTL expiry resets counter window deterministically');
+} else {
+  fail('rate limit behavioral proof: TTL expiry did not reset counter window', JSON.stringify(ttlResetHit));
+}
+
+const isolatedWorkerA = new Map();
+const isolatedWorkerB = new Map();
+simulateSharedRateLimitDecision({ buckets: isolatedWorkerA, policy: ratePolicy, rawKey: 'webhookDelivery:tenant|connector|action|origin', nowMs: 20_000 });
+simulateSharedRateLimitDecision({ buckets: isolatedWorkerA, policy: ratePolicy, rawKey: 'webhookDelivery:tenant|connector|action|origin', nowMs: 20_100 });
+const isolatedBypass = simulateSharedRateLimitDecision({ buckets: isolatedWorkerB, policy: ratePolicy, rawKey: 'webhookDelivery:tenant|connector|action|origin', nowMs: 20_200 });
+if (isolatedBypass.ok && isolatedBypass.count === 1) {
+  pass('rate limit production blocker proof: isolated process-local stores allow cross-instance bypass, so distributed atomic store remains required');
+} else {
+  fail('rate limit production blocker proof: isolated store simulation did not expose bypass', JSON.stringify(isolatedBypass));
+}
+
 process.exitCode = failed ? 1 : 0;

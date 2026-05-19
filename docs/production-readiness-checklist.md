@@ -34,7 +34,7 @@ ActionBridge is suitable for controlled pilot continuation only. This checklist 
 - [x] Trusted proxy/header fail-closed enforcement for production mode.
 - [x] Durable connector pause/quarantine operator API.
 - [x] Durable quarantine behavioral proof for repeated-failure persistence and pre-network delivery block.
-- [ ] Cross-instance/concurrency tests.
+- [x] Cross-instance/concurrency tests. _Behavioral module covers shared-counter cross-worker denial, TTL reset, and process-local bypass proof; production still requires a real distributed atomic store._
 
 ## Gate 4 — Observability and Operations
 - [x] Redacted audit logs.

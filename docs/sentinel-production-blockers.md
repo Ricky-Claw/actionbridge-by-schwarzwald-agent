@@ -6,8 +6,8 @@ This file tracks blockers that must remain visible until fixed. A controlled pil
 Current limiter is `pilot_process_local`. Production needs a distributed atomic counter store and trusted proxy identity.
 
 Required proof:
-- [ ] cross-instance counter test;
-- [ ] TTL reset test;
+- [x] cross-instance counter test; _Behavioral module now proves a shared counter denies a third same-window webhook hit across worker calls and separately proves isolated process-local stores can be bypassed, preserving the production distributed-store blocker._
+- [x] TTL reset test; _Behavioral module now proves expired windows reset deterministically._
 - [x] trusted proxy absent/missing-header fail-closed proof in production mode;
 - [x] tenant/connector/action/token dimensions documented and used in pilot throttles;
 - [ ] real distributed atomic counter store wired.

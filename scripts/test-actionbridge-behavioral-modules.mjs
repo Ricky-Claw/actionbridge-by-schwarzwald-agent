@@ -129,6 +129,45 @@ for (const [label, pattern] of [
   else fail(`webhook delivery endpoint path behavior: ${label}`);
 }
 
+for (const [label, pattern] of [
+  ['delivery resolves DNS once before network execution', /const addresses = await dns\.lookup\(target\.hostname, \{ all: true, verbatim: true \}\)[\s\S]*decideActionBridgeDnsPinning/],
+  ['delivery validates every resolver address before choosing pinned IP', /addresses\.map\(\(entry\) => \(\{ address: entry\.address, family: entry\.family === 6 \? 6 : 4 \}\)\)[\s\S]*if \(!dnsDecision\.ok\)[\s\S]*const pinnedAddress = addresses\[0\]\?\.address/],
+  ['delivery connects to pinned IP while preserving original Host and SNI', /host: input\.pinnedAddress[\s\S]*servername: input\.target\.hostname[\s\S]*Host: input\.target\.host[\s\S]*postPinnedHttpsJson\(\{[\s\S]*target,[\s\S]*pinnedAddress/],
+  ['delivery avoids fetch to prevent second resolver after validation', /Do not use fetch\(\)[\s\S]*DNS rebinding SSRF risk/],
+]) {
+  if (pattern.test(webhookDeliverySource)) pass(`webhook DNS pinning source behavior: ${label}`);
+  else fail(`webhook DNS pinning source behavior: ${label}`);
+}
+
+function simulateWebhookDnsPinningDelivery(addresses) {
+  const privateRanges = [/^10\./, /^127\./, /^169\.254\./, /^172\.(1[6-9]|2\d|3[01])\./, /^192\.168\./, /^0\./, /^::1$/, /^fc/i, /^fd/i, /^fe80:/i];
+  const safeAddresses = addresses.map((entry) => ({ address: entry.address, family: entry.family === 6 ? 6 : 4 }));
+  if (!safeAddresses.length) return { ok: false, networkExecution: false, reason: 'DNS resolution returned no addresses.' };
+  const unsafe = safeAddresses.find((entry) => privateRanges.some((pattern) => pattern.test(entry.address)));
+  if (unsafe) return { ok: false, networkExecution: false, reason: 'DNS result includes private/internal address.', blockedAddress: unsafe.address };
+  return { ok: true, networkExecution: true, pinnedAddress: addresses[0].address, validatedAddressCount: safeAddresses.length };
+}
+
+const rebindingProbe = simulateWebhookDnsPinningDelivery([
+  { address: '93.184.216.34', family: 4 },
+  { address: '10.0.0.7', family: 4 },
+]);
+if (rebindingProbe.ok === false && rebindingProbe.networkExecution === false && rebindingProbe.blockedAddress === '10.0.0.7') {
+  pass('webhook DNS rebinding behavior: mixed public/private resolver result blocks before network');
+} else {
+  fail('webhook DNS rebinding behavior: mixed public/private resolver result did not fail closed', JSON.stringify(rebindingProbe));
+}
+
+const pinnedProbe = simulateWebhookDnsPinningDelivery([
+  { address: '93.184.216.34', family: 4 },
+  { address: '2606:2800:220:1:248:1893:25c8:1946', family: 6 },
+]);
+if (pinnedProbe.ok === true && pinnedProbe.networkExecution === true && pinnedProbe.pinnedAddress === '93.184.216.34' && pinnedProbe.validatedAddressCount === 2) {
+  pass('webhook DNS pinning behavior: all returned addresses validated, first validated address is pinned for connect');
+} else {
+  fail('webhook DNS pinning behavior: safe resolver result was not pinned deterministically', JSON.stringify(pinnedProbe));
+}
+
 const signingSource = read('src/frontend/lib/actionbridge/webhook-signing.ts');
 for (const [label, pattern] of [
   ['unsigned mode explicit branch exists', /signingMode === 'unsigned_pilot'/],

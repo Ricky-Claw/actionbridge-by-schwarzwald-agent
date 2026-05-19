@@ -293,6 +293,12 @@ for (const token of ['auth.getUser', 'UNAUTHORIZED', 'actionbridge_error_logs', 
   else fail(`errors route missing security marker: ${token}`);
 }
 if (errorsRoute.includes('token_digest') || errorsRoute.includes('secret_ref') || errorsRoute.includes('idempotency_key')) fail('errors route must not select secrets, token digests, or raw idempotency keys');
+const errorRetentionOpsRoute = read('src/frontend/app/api/actionbridge/ops/error-retention/route.ts');
+for (const token of ['ACTIONBRIDGE_RETENTION_CRON_SECRET', 'ACTIONBRIDGE_RETENTION_USER_IDS', 'ACTIONBRIDGE_RETENTION_DELETE_ENABLED', 'x-actionbridge-retention-confirm', 'DELETE_EXPIRED_ACTIONBRIDGE_ERROR_LOGS', 'pruneActionBridgeResolvedErrorLogs', 'error_log.retention_cron_deleted']) {
+  if (errorRetentionOpsRoute.includes(token)) pass(`error retention cron security marker: ${token}`);
+  else fail(`error retention cron missing security marker: ${token}`);
+}
+if (errorRetentionOpsRoute.includes('auth.getUser') || errorRetentionOpsRoute.includes('token_digest') || errorRetentionOpsRoute.includes('secret_ref') || errorRetentionOpsRoute.includes('idempotency_key')) fail('retention cron route must not depend on browser auth or expose token/secret/idempotency fields');
 const quarantineRoute = read('src/frontend/app/api/actionbridge/quarantine/route.ts');
 for (const token of ['auth.getUser', 'UNAUTHORIZED', 'actionbridge_connector_quarantine', ".eq('user_id', user!.id)", "eq('status', 'active')", 'connector_quarantine.paused', 'connector_quarantine.resolved', 'redactActionBridgeValue']) {
   if (quarantineRoute.includes(token)) pass(`quarantine route security marker: ${token}`);

@@ -33,11 +33,15 @@ Recommended retention before production:
 - `open` or `acknowledged`: retain until resolution, then follow severity retention.
 
 ## Deletion / Export
-Production implementation should provide an operator/admin job that:
-- deletes expired resolved logs by severity;
-- records deletion summary without raw context;
-- respects user/account deletion through cascade behavior;
-- can export a redacted incident packet for Sentinel review.
+ActionBridge now has two retention execution paths:
+- operator UI/API: `/api/actionbridge/errors` supports dry-run by default and requires `DELETE_EXPIRED_ACTIONBRIDGE_ERROR_LOGS` for deletion;
+- scheduled/background API: `/api/actionbridge/ops/error-retention` is bearer-secret protected with `ACTIONBRIDGE_RETENTION_CRON_SECRET`, scopes work to `ACTIONBRIDGE_RETENTION_USER_IDS`, and remains dry-run unless `ACTIONBRIDGE_RETENTION_DELETE_ENABLED=true` plus `x-actionbridge-retention-confirm: DELETE_EXPIRED_ACTIONBRIDGE_ERROR_LOGS` are both present.
+
+Both paths:
+- delete only expired `resolved` logs by severity;
+- record deletion summaries without raw context;
+- respect user/account deletion through cascade behavior;
+- can support redacted incident packet export for Sentinel review.
 
 ## Pilot Rule
 For controlled pilot, error logs are allowed as operational security data if contexts remain redacted and bounded. Do not attach raw payloads or screenshots containing secrets to error context.

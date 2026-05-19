@@ -326,6 +326,7 @@ const routeFiles = [
   'src/frontend/app/actionbridge/bridge.js/route.ts',
   'src/frontend/app/api/actionbridge/capabilities/route.ts',
   'src/frontend/app/api/actionbridge/agent-tools/route.ts',
+  'src/frontend/app/api/actionbridge/ops/error-retention/route.ts',
 ];
 for (const file of routeFiles) {
   if (!exists(file)) fail(`Missing ActionBridge route: ${file}`);
@@ -350,6 +351,7 @@ if (!process.exitCode) {
   const bridgeScriptRoute = read('src/frontend/app/actionbridge/bridge.js/route.ts');
   const capabilitiesRoute = read('src/frontend/app/api/actionbridge/capabilities/route.ts');
   const agentToolsRoute = read('src/frontend/app/api/actionbridge/agent-tools/route.ts');
+  const errorRetentionOpsRoute = read('src/frontend/app/api/actionbridge/ops/error-retention/route.ts');
   for (const [name, source] of [['actions', actionsRoute], ['connectors', connectorsRoute], ['execute', executeRoute], ['approvals', approvalsRoute], ['audit', auditRoute], ['executions', executionsRoute], ['errors', errorsRoute], ['quarantine', quarantineRoute]]) {
     if (!source.includes('createClient')) fail(`${name} route must use Supabase server auth`);
     if (!source.includes('auth.getUser')) fail(`${name} route must require authenticated user`);
@@ -398,6 +400,9 @@ if (!process.exitCode) {
   }
   for (const token of ['actionbridge_error_logs', ".eq('user_id', user!.id)", 'toActionBridgeErrorLogView', 'normalizeActionBridgeErrorCategory', 'normalizeActionBridgeErrorSeverity', 'normalizeActionBridgeErrorStatus', 'export async function PATCH', 'export async function DELETE', 'pruneActionBridgeResolvedErrorLogs', 'ACTIONBRIDGE_ERROR_RETENTION_CONFIRMATION_REQUIRED', 'DELETE_EXPIRED_ACTIONBRIDGE_ERROR_LOGS', 'error_log.retention_deleted', 'ACTIONBRIDGE_ERROR_LOG_LIST_FAILED', 'ACTIONBRIDGE_ERROR_STATUS_TRANSITION_BLOCKED', 'error_log.status_changed']) {
     if (!errorsRoute.includes(token)) fail(`errors route missing safe visibility token ${token}`);
+  }
+  for (const token of ['ACTIONBRIDGE_RETENTION_CRON_SECRET', 'ACTIONBRIDGE_RETENTION_USER_IDS', 'ACTIONBRIDGE_RETENTION_DELETE_ENABLED', 'x-actionbridge-retention-confirm', 'DELETE_EXPIRED_ACTIONBRIDGE_ERROR_LOGS', 'pruneActionBridgeResolvedErrorLogs', 'error_log.retention_cron_dry_run', 'error_log.retention_cron_deleted', 'createCoreServiceClient']) {
+    if (!errorRetentionOpsRoute.includes(token)) fail(`error retention ops route missing scheduled-retention token ${token}`);
   }
   for (const token of ['actionbridge_connector_quarantine', ".eq('user_id', user!.id)", 'toActionBridgeConnectorQuarantineView', 'export async function GET', 'export async function POST', 'export async function PATCH', 'connector_quarantine.paused', 'connector_quarantine.resolved', 'redactActionBridgeValue']) {
     if (!quarantineRoute.includes(token)) fail(`quarantine route missing safe operator token ${token}`);

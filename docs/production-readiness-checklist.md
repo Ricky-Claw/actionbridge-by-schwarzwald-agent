@@ -43,6 +43,7 @@ ActionBridge is suitable for controlled pilot continuation only. This checklist 
 - [x] Bounded error context and circular guard.
 - [x] Compare-and-set error status updates.
 - [x] Retention/GDPR policy implemented operationally for resolved error logs.
+- [x] Scheduled/background retention execution path. _Bearer-secret protected cron route added; dry-run default and destructive deletion requires env enable plus explicit confirmation header._
 - [ ] Operator notification/alerting for High/Critical errors. _Durable owner-scoped alert inbox added; active escalation/notification channel still required._
 - [x] Operator failure UI consuming `/api/actionbridge/errors`.
 

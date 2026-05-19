@@ -61,4 +61,4 @@ Required proof:
 - [x] deletion summary audit;
 - [x] GDPR handling documented for pilot customers;
 - [x] operator UI for routine dry-run/delete retention operations;
-- [ ] scheduled/background execution for production operations.
+- [x] scheduled/background execution for production operations. _`/api/actionbridge/ops/error-retention` is cron-callable, bearer-secret protected, tenant/user allowlist scoped, dry-run by default, and requires both env enablement and confirmation header before deleting._

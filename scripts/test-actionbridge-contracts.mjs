@@ -334,6 +334,7 @@ const routeFiles = [
   'src/frontend/app/actionbridge/bridge.js/route.ts',
   'src/frontend/app/api/actionbridge/capabilities/route.ts',
   'src/frontend/app/api/actionbridge/agent-tools/route.ts',
+  'src/frontend/app/api/actionbridge/targets/route.ts',
   'src/frontend/app/api/actionbridge/ops/error-retention/route.ts',
 ];
 for (const file of routeFiles) {
@@ -359,6 +360,7 @@ if (!process.exitCode) {
   const bridgeScriptRoute = read('src/frontend/app/actionbridge/bridge.js/route.ts');
   const capabilitiesRoute = read('src/frontend/app/api/actionbridge/capabilities/route.ts');
   const agentToolsRoute = read('src/frontend/app/api/actionbridge/agent-tools/route.ts');
+  const targetsRoute = read('src/frontend/app/api/actionbridge/targets/route.ts');
   const errorRetentionOpsRoute = read('src/frontend/app/api/actionbridge/ops/error-retention/route.ts');
   for (const [name, source] of [['actions', actionsRoute], ['connectors', connectorsRoute], ['execute', executeRoute], ['approvals', approvalsRoute], ['audit', auditRoute], ['executions', executionsRoute], ['errors', errorsRoute], ['quarantine', quarantineRoute]]) {
     if (!source.includes('createClient')) fail(`${name} route must use Supabase server auth`);
@@ -372,6 +374,9 @@ if (!process.exitCode) {
   if (!connectorsRoute.includes('createActionBridgeEmbeddedSetupDescriptor')) fail('connectors route must expose embedded setup descriptor');
   if (!connectorsRoute.includes('embeddedSetup')) fail('connectors route must include embeddedSetup response field');
   if (!connectorsRoute.includes('webhook_signing_mode') || !connectorsRoute.includes('webhookSigningMode')) fail('connectors route must expose explicit webhook signing mode without secrets');
+  for (const token of ['actionbridge_targets', '.eq(\'owner_user_id\', user!.id)', '.eq(\'tenant_id\', tenantId)', 'createActionBridgeTargetsFromUrls', 'createActionBridgeTargetToolCatalog', 'networkExecution: false']) {
+    if (!targetsRoute.includes(token)) fail(`targets route missing ${token}`);
+  }
   if (!connectorsRoute.includes("new Set(['http', 'website', 'webhook', 'whatsapp_business'])")) fail('connectors route must allow website, webhook, and WhatsApp Business connector types');
   if (!connectorsRoute.includes('public_page_extract') || !connectorsRoute.includes('no_form_submit')) fail('website connectors must persist public extraction guardrail capabilities');
   if (!connectorsRoute.includes('parsedUrl.username') || !connectorsRoute.includes('parsedUrl.password')) fail('connectors route must reject URL userinfo secrets');

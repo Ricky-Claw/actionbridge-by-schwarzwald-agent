@@ -10,8 +10,12 @@ const pass = (msg) => console.log(`✅ ${msg}`);
 
 const modulePath = 'src/frontend/lib/actionbridge/multi-target-registry.ts';
 const migrationPath = 'supabase/migrations/20260519143000_actionbridge_multi_target_registry.sql';
+const routePath = 'src/frontend/app/api/actionbridge/targets/route.ts';
+const uiPath = 'src/frontend/app/actionbridge/operator/ActionBridgeTargetsClient.tsx';
 const moduleSource = read(modulePath);
 const migration = read(migrationPath);
+const routeSource = read(routePath);
+const uiSource = read(uiPath);
 
 for (const token of [
   'ACTIONBRIDGE_DEFAULT_BRIDGE_ORIGIN',
@@ -128,3 +132,35 @@ for (const tool of targetTools) assert.ok(moduleSource.includes(tool));
 assert.ok(moduleSource.includes("mode: 'read_only'"));
 assert.ok(!moduleSource.includes("riskLevel: 'write'"));
 pass('Target tool catalog is read-only and tenant scoped');
+
+for (const token of [
+  'requireActionBridgeUser',
+  "from('actionbridge_targets')",
+  ".eq('owner_user_id', user!.id)",
+  ".eq('provider_id', providerId)",
+  ".eq('tenant_id', tenantId)",
+  'createActionBridgeTargetsFromUrls',
+  'upsert',
+  "networkExecution: false",
+  'ACTIONBRIDGE_TARGET_TENANT_REQUIRED',
+  'enforceActionBridgeRateLimit',
+  'createActionBridgeRateLimitHeaders',
+]) {
+  if (!routeSource.includes(token)) fail(`targets API route missing ${token}`);
+}
+for (const forbidden of ['http://', 'secret_ref', 'token_digest', 'document.cookie', 'localStorage']) {
+  if (routeSource.includes(forbidden)) fail(`targets API route must not expose unsafe primitive: ${forbidden}`);
+}
+pass('Targets API route is auth-gated, tenant-scoped, registry-only, and non-networked');
+
+for (const token of [
+  '/api/actionbridge/targets',
+  '--ab-primary',
+  '--ab-card',
+  'ActionBridge bleibt nur Connector-Core',
+  'connectionStatus',
+  'capabilities',
+]) {
+  if (!uiSource.includes(token)) fail(`targets UI missing ${token}`);
+}
+pass('Targets operator UI supports multi-URL intake/status and theme tokens without mock production data');

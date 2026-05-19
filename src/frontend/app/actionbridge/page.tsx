@@ -1,6 +1,7 @@
 const screens = [
   ['/actionbridge/pitch', 'Pitch', 'The core ActionBridge promise in one screen.'],
   ['/actionbridge/operator', 'Operator cockpit', 'Create and track customer setup links.'],
+  ['/actionbridge/targets', 'Multi-URL targets', 'Register many tenant-scoped URLs and track connected/missing-script status.'],
   ['/actionbridge/wizard', 'Setup wizard', 'Customer flow from website to safe capability.'],
   ['/actionbridge/permissions', 'Permission matrix', 'Allowed, approval-required, and blocked actions.'],
   ['/actionbridge/demo-tenant', 'Demo tenant', 'Controlled example business for recordings.'],

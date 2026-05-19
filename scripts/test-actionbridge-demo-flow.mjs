@@ -12,6 +12,7 @@ const fail = (msg) => { failed += 1; console.error(`❌ ${msg}`); };
 const orderedDemoPages = [
   'src/frontend/app/actionbridge/page.tsx',
   'src/frontend/app/actionbridge/operator/page.tsx',
+  'src/frontend/app/actionbridge/targets/page.tsx',
   'src/frontend/app/actionbridge/setup/page.tsx',
   'src/frontend/app/actionbridge/pitch/page.tsx',
   'src/frontend/app/actionbridge/wizard/page.tsx',
@@ -37,6 +38,7 @@ const orderedDemoRoutes = [
   'src/frontend/app/api/actionbridge/bridge/handshake/route.ts',
   'src/frontend/app/api/actionbridge/capabilities/route.ts',
   'src/frontend/app/api/actionbridge/agent-tools/route.ts',
+  'src/frontend/app/api/actionbridge/targets/route.ts',
   'src/frontend/app/api/actionbridge/execute/route.ts',
   'src/frontend/app/api/actionbridge/audit/route.ts',
 ];

@@ -64,6 +64,7 @@ const redactionSource = read('src/frontend/lib/actionbridge/redaction.ts')
   .replace(/: boolean/g, '')
   .replace(/value as Record<string, unknown>/g, 'value');
 const redactionContext = {};
+const syntheticAwsAccessKeyId = `AKIA${'ABCDEFGHIJKLMNOP'}`;
 vm.createContext(redactionContext);
 vm.runInContext(`${redactionSource}; globalThis.__redact = redactActionBridgeValue;`, redactionContext);
 for (const [label, input, expected] of [
@@ -72,6 +73,10 @@ for (const [label, input, expected] of [
   ['jwt is redacted', 'jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.signaturePart', 'jwt [REDACTED_JWT]'],
   ['query api key is redacted', 'callback failed https://example.test/hook?api_key=supersecret123&ok=1', 'callback failed https://example.test/hook?api_key=[REDACTED_SECRET]&ok=1'],
   ['common provider key is redacted', 'provider returned sk-abcdefghijklmnopqrstuvwxyz', 'provider returned [REDACTED_SECRET]'],
+  ['colon key-value secret is redacted', 'provider error api_key: live_secret_value_12345', 'provider error api_key: [REDACTED_SECRET]'],
+  ['openai project secret is redacted', 'provider returned sk-proj-abcdefghijklmnopqrstuvwxyz1234567890', 'provider returned [REDACTED_SECRET]'],
+  ['stripe webhook secret is redacted', 'receiver configured whsec_abcdefghijklmnopqrstuvwxyz123456', 'receiver configured [REDACTED_SECRET]'],
+  ['aws access key is redacted', `aws key ${syntheticAwsAccessKeyId} failed`, 'aws key [REDACTED_SECRET] failed'],
 ]) {
   const actual = redactionContext.__redact(input);
   if (actual === expected) pass(`redactActionBridgeValue free-text credential: ${label}`, `=> ${actual}`);

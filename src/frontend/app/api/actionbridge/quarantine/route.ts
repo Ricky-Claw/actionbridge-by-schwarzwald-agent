@@ -23,7 +23,8 @@ function normalizeQuarantineReason(value: unknown): 'operator_pause' | 'system_p
 function safeOperatorMessage(value: unknown): string {
   if (typeof value !== 'string') return 'Connector is paused by ActionBridge operator controls.';
   const trimmed = value.trim().slice(0, 240);
-  return trimmed || 'Connector is paused by ActionBridge operator controls.';
+  const redacted = redactActionBridgeValue(trimmed);
+  return typeof redacted === 'string' && redacted.trim() ? redacted : 'Connector is paused by ActionBridge operator controls.';
 }
 
 export async function GET(request: NextRequest) {

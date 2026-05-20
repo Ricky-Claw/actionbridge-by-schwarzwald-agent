@@ -313,7 +313,7 @@ for (const token of ['ACTIONBRIDGE_RETENTION_CRON_SECRET', 'ACTIONBRIDGE_RETENTI
 }
 if (errorRetentionOpsRoute.includes('auth.getUser') || errorRetentionOpsRoute.includes('token_digest') || errorRetentionOpsRoute.includes('secret_ref') || errorRetentionOpsRoute.includes('idempotency_key')) fail('retention cron route must not depend on browser auth or expose token/secret/idempotency fields');
 const quarantineRoute = read('src/frontend/app/api/actionbridge/quarantine/route.ts');
-for (const token of ['auth.getUser', 'UNAUTHORIZED', 'actionbridge_connector_quarantine', ".eq('user_id', user!.id)", "eq('status', 'active')", 'connector_quarantine.paused', 'connector_quarantine.resolved', 'redactActionBridgeValue']) {
+for (const token of ['auth.getUser', 'UNAUTHORIZED', 'actionbridge_connector_quarantine', ".eq('user_id', user!.id)", "eq('status', 'active')", 'connector_quarantine.paused', 'connector_quarantine.resolved', 'redactActionBridgeValue', 'const redacted = redactActionBridgeValue(trimmed)']) {
   if (quarantineRoute.includes(token)) pass(`quarantine route security marker: ${token}`);
   else fail(`quarantine route missing security marker: ${token}`);
 }

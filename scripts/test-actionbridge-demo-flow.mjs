@@ -22,6 +22,7 @@ const orderedDemoPages = [
   'src/frontend/app/actionbridge/audit-preview/page.tsx',
   'src/frontend/app/actionbridge/tool-preview/page.tsx',
   'src/frontend/app/actionbridge/failures/page.tsx',
+  'src/frontend/app/actionbridge/quarantine/page.tsx',
   'src/frontend/app/actionbridge/sales/page.tsx',
 ];
 
@@ -70,7 +71,7 @@ for (const token of ['Setup-Link', 'Domain-Verifikation', 'Bridge-Handshake', 'T
   if (uiSource.toLowerCase().includes(token.toLowerCase())) pass(`100k MVP UI covers: ${token}`);
   else fail(`100k MVP UI missing: ${token}`);
 }
-for (const token of ['ActionBridge Experience Map', 'Every approved website becomes a safe agent tool', 'Permission Matrix', 'Customer Setup Wizard', 'Controlled Demo Tenant', 'Trust Center', 'Audit Timeline', 'Agent Tool Preview', 'Failure-State UX', 'One-page Sales Narrative']) {
+for (const token of ['ActionBridge Experience Map', 'Every approved website becomes a safe agent tool', 'Permission Matrix', 'Customer Setup Wizard', 'Controlled Demo Tenant', 'Trust Center', 'Audit Timeline', 'Agent Tool Preview', 'Failure-State UX', 'Connector Quarantine', 'One-page Sales Narrative']) {
   if (uiSource.toLowerCase().includes(token.toLowerCase())) pass(`ActionBridge experience covers: ${token}`);
   else fail(`ActionBridge experience missing: ${token}`);
 }

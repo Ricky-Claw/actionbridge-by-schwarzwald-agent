@@ -424,15 +424,38 @@ try {
 }
 
 const operatorAlertRoute = read('src/frontend/app/api/actionbridge/alerts/route.ts');
-for (const token of ["from('actionbridge_operator_alerts')", "eq('user_id', user!.id)", 'ACTIONBRIDGE_OPERATOR_ALERT_LIST_FAILED', 'toActionBridgeOperatorAlertView', "severity === 'high' || severity === 'critical'"]) {
+for (const token of ["from('actionbridge_operator_alerts')", "eq('user_id', user!.id)", 'ACTIONBRIDGE_OPERATOR_ALERT_LIST_FAILED', 'toActionBridgeOperatorAlertView', "severity === 'high' || severity === 'critical'", 'ACTIONBRIDGE_OPERATOR_ALERT_STATUS_TRANSITION_BLOCKED', 'operator_alert.status_changed', 'update_actionbridge_operator_alert_status', 'p_current_status: currentStatus', 'p_next_status: nextStatus']) {
   if (operatorAlertRoute.includes(token)) pass(`operator alerting route token: ${token}`);
   else fail(`operator alerting route token missing: ${token}`);
+}
+
+const alertLifecycleRows = new Map([['alert-race', { status: 'open', acknowledgedAt: null, resolvedAt: null }]]);
+function compareAndSetAlertStatus(id, observedStatus, nextStatus) {
+  const row = alertLifecycleRows.get(id);
+  if (!row || row.status !== observedStatus) return false;
+  if (nextStatus === 'resolved') row.resolvedAt = 'now';
+  if (nextStatus === 'acknowledged' || nextStatus === 'resolved') row.acknowledgedAt ||= 'now';
+  row.status = nextStatus;
+  return true;
+}
+const alertFirstWriter = compareAndSetAlertStatus('alert-race', 'open', 'resolved');
+const alertStaleWriter = compareAndSetAlertStatus('alert-race', 'open', 'acknowledged');
+if (alertFirstWriter === true && alertStaleWriter === false && alertLifecycleRows.get('alert-race').status === 'resolved' && alertLifecycleRows.get('alert-race').acknowledgedAt) {
+  pass('operator alert lifecycle race proof: stale acknowledged update cannot downgrade resolved alert and resolution records acknowledgement');
+} else {
+  fail('operator alert lifecycle race proof failed');
 }
 
 const operatorAlertMigration = read('supabase/migrations/20260517050000_actionbridge_operator_alerts.sql');
 for (const token of ['CREATE TABLE IF NOT EXISTS public.actionbridge_operator_alerts', "severity TEXT NOT NULL CHECK (severity IN ('high', 'critical'))", 'UNIQUE (user_id, error_log_id)', 'ENABLE ROW LEVEL SECURITY', 'actionbridge_operator_alerts_owner_select']) {
   if (operatorAlertMigration.includes(token)) pass(`operator alerting migration token: ${token}`);
   else fail(`operator alerting migration token missing: ${token}`);
+}
+
+const operatorAlertStatusRpcMigration = read('supabase/migrations/20260521010000_actionbridge_operator_alert_status_rpc.sql');
+for (const token of ['CREATE OR REPLACE FUNCTION public.update_actionbridge_operator_alert_status', 'SECURITY DEFINER', 'SET search_path = public', 'UPDATE public.actionbridge_operator_alerts', 'UPDATE public.actionbridge_error_logs', 'ACTIONBRIDGE_OPERATOR_ALERT_ERROR_LOG_SYNC_FAILED', 'OWNER TO postgres', 'REVOKE ALL ON FUNCTION public.update_actionbridge_operator_alert_status', 'FROM authenticated', 'GRANT EXECUTE ON FUNCTION public.update_actionbridge_operator_alert_status', 'TO service_role']) {
+  if (operatorAlertStatusRpcMigration.includes(token)) pass(`operator alert status rpc migration token: ${token}`);
+  else fail(`operator alert status rpc migration token missing: ${token}`);
 }
 
 const rateLimitSource = read('src/frontend/lib/actionbridge/rate-limit.ts');

@@ -2,7 +2,9 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { normalizeActionBridgeErrorSeverity, normalizeActionBridgeErrorStatus, toActionBridgeOperatorAlertView } from '@/lib/actionbridge/error-log';
+import { createCoreServiceClient } from '@/lib/core/service-client';
+import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
+import { canTransitionActionBridgeErrorStatus, normalizeActionBridgeErrorSeverity, normalizeActionBridgeErrorStatus, toActionBridgeOperatorAlertView } from '@/lib/actionbridge/error-log';
 
 async function requireActionBridgeUser() {
   const supabase = await createClient();
@@ -44,4 +46,56 @@ export async function GET(request: NextRequest) {
     operatorAlerts: (data || []).map(toActionBridgeOperatorAlertView),
     filters: { severity: severity === 'high' || severity === 'critical' ? severity : null, status: status || null },
   });
+}
+
+export async function PATCH(request: NextRequest) {
+  const { supabase, user, response } = await requireActionBridgeUser();
+  if (response) return response;
+
+  const body = await request.json().catch(() => ({}));
+  const alertId = typeof body.alertId === 'string' ? body.alertId.trim() : typeof body.id === 'string' ? body.id.trim() : '';
+  const nextStatus = normalizeActionBridgeErrorStatus(body.status);
+  if (!alertId || !nextStatus || nextStatus === 'open') {
+    return NextResponse.json({ error: 'INVALID_ACTIONBRIDGE_OPERATOR_ALERT_STATUS_UPDATE' }, { status: 400 });
+  }
+
+  const { data: existing } = await (supabase as any)
+    .from('actionbridge_operator_alerts')
+    .select('id,error_log_id,connector_id,status,category,severity,error_code')
+    .eq('user_id', user!.id)
+    .eq('id', alertId)
+    .maybeSingle();
+  if (!existing) return NextResponse.json({ error: 'ACTIONBRIDGE_OPERATOR_ALERT_NOT_FOUND' }, { status: 404 });
+
+  const currentStatus = normalizeActionBridgeErrorStatus(existing.status);
+  if (!currentStatus || !canTransitionActionBridgeErrorStatus(currentStatus, nextStatus)) {
+    return NextResponse.json({ error: 'ACTIONBRIDGE_OPERATOR_ALERT_STATUS_TRANSITION_BLOCKED' }, { status: 409 });
+  }
+
+  const serviceSupabase = createCoreServiceClient();
+  if (!serviceSupabase) return NextResponse.json({ error: 'ACTIONBRIDGE_OPERATOR_ALERT_STATUS_UPDATE_FAILED' }, { status: 503 });
+
+  const now = new Date().toISOString();
+  const { data, error } = await (serviceSupabase as any)
+    .rpc('update_actionbridge_operator_alert_status', {
+      p_user_id: user!.id,
+      p_alert_id: alertId,
+      p_current_status: currentStatus,
+      p_next_status: nextStatus,
+      p_changed_at: now,
+    });
+
+  const updatedAlert = Array.isArray(data) ? data[0] : data;
+  if (error || !updatedAlert) return NextResponse.json({ error: 'ACTIONBRIDGE_OPERATOR_ALERT_STATUS_UPDATE_FAILED' }, { status: 409 });
+
+  await persistActionBridgeControlAuditEvent(serviceSupabase, {
+    userId: user!.id,
+    connectorId: updatedAlert.connector_id || null,
+    eventName: 'operator_alert.status_changed',
+    input: { alertId, errorLogId: updatedAlert.error_log_id, previousStatus: currentStatus, nextStatus },
+    status: 'succeeded',
+    resultSummary: { alertId, errorLogId: updatedAlert.error_log_id, category: updatedAlert.category, severity: updatedAlert.severity, errorCode: updatedAlert.error_code, status: updatedAlert.status },
+  });
+
+  return NextResponse.json({ operatorAlert: toActionBridgeOperatorAlertView(updatedAlert) });
 }

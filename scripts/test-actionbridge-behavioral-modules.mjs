@@ -519,4 +519,16 @@ if (isolatedBypass.ok && isolatedBypass.count === 1) {
   fail('rate limit production blocker proof: isolated store simulation did not expose bypass', JSON.stringify(isolatedBypass));
 }
 
+const alertDigestRoute = read('src/frontend/app/api/actionbridge/ops/alert-digest/route.ts');
+for (const [label, pattern] of [
+  ['alert digest is bearer-secret protected and fail-closed when env secret is missing', /const expected = process\.env\.ACTIONBRIDGE_ALERT_DIGEST_SECRET[\s\S]*if \(!expected\) return false[\s\S]*Bearer \$\{expected\}/],
+  ['alert digest only processes configured user allowlist', /parseUserIds\(process\.env\.ACTIONBRIDGE_ALERT_DIGEST_USER_IDS\)[\s\S]*ACTIONBRIDGE_ALERT_DIGEST_USERS_NOT_CONFIGURED/],
+  ['alert digest only selects open high and critical alerts', /from\('actionbridge_operator_alerts'\)[\s\S]*\.eq\('status', 'open'\)[\s\S]*\.in\('severity', \['high', 'critical'\]\)/],
+  ['alert digest response is built through a dedicated redacted projection', /function redactAlertForDigest[\s\S]*toActionBridgeOperatorAlertView[\s\S]*return \{[\s\S]*errorCode: alert\.errorCode[\s\S]*message: alert\.message[\s\S]*resolvedAt: alert\.resolvedAt[\s\S]*\};/],
+  ['alert digest writes bounded audit without alert messages or contexts', /operator_alert\.digest_generated[\s\S]*resultSummary: \{[\s\S]*openCritical[\s\S]*openHigh[\s\S]*alertCount[\s\S]*redacted: true[\s\S]*\}/],
+]) {
+  if (pattern.test(alertDigestRoute)) pass(`operator alert digest behavior: ${label}`);
+  else fail(`operator alert digest behavior: ${label}`);
+}
+
 process.exitCode = failed ? 1 : 0;

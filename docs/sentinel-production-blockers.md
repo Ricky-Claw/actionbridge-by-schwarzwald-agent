@@ -42,15 +42,11 @@ Required proof:
 - [ ] production KMS/secret-manager resolver with access audit;
 - [ ] operator rotation workflow/job with rollback and monitoring.
 
-## Blocker 5 — Build/Typecheck/Lint Metadata
-This focused repo snapshot lacks full framework build metadata.
+## Blocker 5 — Browser/Userflow E2E
+Build/typecheck/lint metadata has been restored for the focused `src/frontend` snapshot: lockfile/install context exists, `npm run build` executes `next build src/frontend`, `npm run typecheck` executes `tsc --noEmit`, and `npm run lint` executes ESLint with zero warnings.
 
-Required proof:
-- lockfile/install context restored;
-- `npm run build`;
-- typecheck;
-- lint;
-- browser/userflow smoke test.
+Remaining required proof:
+- browser/userflow smoke test for setup-link → verification → bridge → capability → approval → connector execution.
 
 ## Blocker 6 — Operational Retention
 Error logs are bounded and redacted. A resolved-log retention operation now exists on `/api/actionbridge/errors` with dry-run default, explicit destructive confirmation, severity-age cutoffs, and redacted deletion summary audit.

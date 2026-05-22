@@ -26,6 +26,8 @@ function isAuthorized(request: NextRequest): boolean {
   return header === `Bearer ${expected}`;
 }
 
+type ActionBridgeDigestAlert = ReturnType<typeof redactAlertForDigest>;
+
 function redactAlertForDigest(row: any) {
   const alert = toActionBridgeOperatorAlertView(row);
   return {
@@ -76,7 +78,7 @@ export async function POST(request: NextRequest) {
       continue;
     }
 
-    const alerts = (data || []).map(redactAlertForDigest);
+    const alerts: ActionBridgeDigestAlert[] = (data || []).map(redactAlertForDigest);
     const summary = {
       userId,
       openCritical: alerts.filter((alert) => alert.severity === 'critical').length,

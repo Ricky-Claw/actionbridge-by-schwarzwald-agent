@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
   }
 
   const rateLimit = enforceActionBridgeRateLimit({ request, policyName: 'backendBridgePairing', discriminator: `${connectorId}:${nonce.slice(0, 16)}` });
-  if (!rateLimit.allowed) return NextResponse.json({ error: 'ACTIONBRIDGE_RATE_LIMITED' }, { status: 429, headers: rateLimit.headers });
+  if (!rateLimit.ok) return rateLimit.response || NextResponse.json({ error: 'ACTIONBRIDGE_RATE_LIMITED' }, { status: 429 });
 
   const serviceSupabase = createCoreServiceClient();
   if (!serviceSupabase) return NextResponse.json({ error: 'ACTIONBRIDGE_BACKEND_BRIDGE_HEALTH_UNAVAILABLE' }, { status: 503 });

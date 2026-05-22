@@ -91,8 +91,8 @@ export function normalizeActionBridgeCapabilityRuleInput(input: {
   const definition = ACTIONBRIDGE_CAPABILITY_DEFINITIONS[input.name];
   const rawConfig = input.config && typeof input.config === 'object' && !Array.isArray(input.config) ? input.config as Record<string, unknown> : {};
   const config = Object.fromEntries(Object.entries(rawConfig).slice(0, 20).map(([key, value]) => [
-    sanitizeActionBridgeSchemaText(key).slice(0, 80),
-    typeof value === 'string' ? sanitizeActionBridgeSchemaText(value).slice(0, 500) : value,
+    (sanitizeActionBridgeSchemaText(key, 80) || '').slice(0, 80),
+    typeof value === 'string' ? (sanitizeActionBridgeSchemaText(value, 500) || '').slice(0, 500) : value,
   ]));
   return {
     connectorId,
@@ -132,7 +132,7 @@ export function compileActionBridgeCapabilityTool(input: {
     riskLevel: definition.riskLevel,
     requiresApproval: definition.riskLevel !== 'read' || definition.requiresApproval,
     enabled: input.enabled,
-    inputSchema: sanitizeActionBridgeInputSchema(definition.inputSchema),
+    inputSchema: sanitizeActionBridgeInputSchema(definition.inputSchema) || [],
     outputDescription: definition.outputDescription,
   };
 }

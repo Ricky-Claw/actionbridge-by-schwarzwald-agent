@@ -25,8 +25,8 @@ const BEARER_TOKEN_PATTERN = /\b(bearer\s+)[A-Z0-9._~+/-]{16,}=*/gi;
 const JWT_PATTERN = /\beyJ[A-Z0-9_-]{8,}\.[A-Z0-9_-]{8,}\.[A-Z0-9_-]{8,}\b/gi;
 const QUERY_SECRET_PATTERN = /\b(api[_-]?key|access[_-]?token|refresh[_-]?token|auth[_-]?token|idempotency[_-]?key|client[_-]?secret|secret|password|token)(=)[^\s&?#,;]+/gi;
 const KEY_VALUE_SECRET_PATTERN = /\b(api[_-]?key|access[_-]?token|refresh[_-]?token|auth[_-]?token|idempotency[_-]?key|client[_-]?secret|secret|password|token)\s*(:\s*|=\s*)(?!\[REDACTED_)[^\s,;"'`}{]{8,}/gi;
-const COMMON_SECRET_PATTERN = /\b(sk|pk|rk|ghp|gho|ghu|ghs|glpat|xoxb|xoxp)-[A-Z0-9_\-]{12,}\b/gi;
-const OPENAI_PROJECT_SECRET_PATTERN = /\bsk-proj-[A-Z0-9_\-]{20,}\b/gi;
+const COMMON_SECRET_PATTERN = /\b(sk|pk|rk|ghp|gho|ghu|ghs|glpat|xoxb|xoxp)-[A-Z0-9_-]{12,}\b/gi;
+const OPENAI_PROJECT_SECRET_PATTERN = /\bsk-proj-[A-Z0-9_-]{20,}\b/gi;
 const STRIPE_SECRET_PATTERN = /\b(?:whsec|rk_live|sk_live|sk_test)_[A-Z0-9]{16,}\b/gi;
 const AWS_ACCESS_KEY_PATTERN = /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g;
 

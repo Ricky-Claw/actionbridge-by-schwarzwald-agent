@@ -32,7 +32,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const { supabase, user, response } = await requireActionBridgeUser();
+  const { user, response } = await requireActionBridgeUser();
   if (response) return response;
 
   const body = await request.json().catch(() => ({}));

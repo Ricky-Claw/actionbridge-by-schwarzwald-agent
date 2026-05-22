@@ -7,7 +7,6 @@ import { redactActionBridgeValue } from '@/lib/actionbridge/redaction';
 import { createCoreServiceClient } from '@/lib/core/service-client';
 import { sanitizeActionBridgeInputSchema, sanitizeActionBridgeSchemaName, sanitizeActionBridgeSchemaText } from '@/lib/actionbridge/schema-safety';
 
-const ACTIONBRIDGE_RISK_LEVELS = new Set<ActionBridgeRiskLevel>(['read', 'write', 'transactional', 'destructive']);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 async function requireActionBridgeUser() {

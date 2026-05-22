@@ -50,10 +50,10 @@ ActionBridge is suitable for controlled pilot continuation only. This checklist 
 ## Gate 5 — Verification Tooling
 - [x] `npm test` gate.
 - [x] `git diff --check` gate.
-- [ ] Build metadata restored (`tsconfig`, Next config, lockfile/install context).
-- [ ] `npm run build`.
-- [ ] Typecheck.
-- [ ] Lint.
+- [x] Build metadata restored (`tsconfig`, Next config, lockfile/install context). _Next/TypeScript/ESLint/package-lock restored for the focused `src/frontend` snapshot._
+- [x] `npm run build`. _Runs `next build src/frontend` successfully._
+- [x] Typecheck. _Runs `tsc --noEmit` successfully._
+- [x] Lint. _Runs `eslint src/frontend --max-warnings=0` successfully._
 - [ ] Browser/userflow E2E.
 
 ## Gate 6 — Product Boundary

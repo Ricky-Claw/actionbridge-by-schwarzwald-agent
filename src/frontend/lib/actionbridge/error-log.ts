@@ -250,7 +250,7 @@ async function pruneResolvedErrorLogsForPolicy(input: {
   cutoff: string;
   dryRun: boolean;
 }): Promise<number> {
-  let query = (input.supabase as any)
+  const query = (input.supabase as any)
     .from('actionbridge_error_logs')
     .select('id', { count: 'exact', head: input.dryRun })
     .eq('user_id', input.userId)

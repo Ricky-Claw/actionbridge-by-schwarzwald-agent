@@ -84,7 +84,7 @@ export async function PATCH(request: NextRequest) {
   if (!code) return NextResponse.json({ error: 'INVALID_ACTIONBRIDGE_BACKEND_BRIDGE_PAIRING_EXCHANGE' }, { status: 400 });
 
   const rateLimit = enforceActionBridgeRateLimit({ request, policyName: 'backendBridgePairing', discriminator: code.slice(0, 16) });
-  if (!rateLimit.allowed) return NextResponse.json({ error: 'ACTIONBRIDGE_RATE_LIMITED' }, { status: 429, headers: rateLimit.headers });
+  if (!rateLimit.ok) return rateLimit.response || NextResponse.json({ error: 'ACTIONBRIDGE_RATE_LIMITED' }, { status: 429 });
 
   const serviceSupabase = createCoreServiceClient();
   if (!serviceSupabase) return NextResponse.json({ error: 'ACTIONBRIDGE_BACKEND_BRIDGE_PAIRING_UNAVAILABLE' }, { status: 503 });

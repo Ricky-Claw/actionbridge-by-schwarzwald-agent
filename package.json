@@ -13,10 +13,30 @@
     "test:visibility-sanitizer": "node scripts/test-actionbridge-visibility-sanitizer.mjs",
     "test:demo-flow": "node scripts/test-actionbridge-demo-flow.mjs",
     "test:multi-target-registry": "node scripts/test-actionbridge-multi-target-registry.mjs",
-    "check": "npm test && git diff --check",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/frontend --max-warnings=0",
+    "build": "next build src/frontend",
+    "audit:high": "node scripts/audit-actionbridge-high.mjs",
+    "check": "npm test && npm run typecheck && npm run lint && npm run build && npm run audit:high && git diff --check",
     "test:behavioral-modules": "node scripts/test-actionbridge-behavioral-modules.mjs"
   },
   "engines": {
     "node": ">=22"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.6.1",
+    "@supabase/supabase-js": "^2.49.4",
+    "next": "^16.2.6",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.27.0",
+    "@types/node": "^22.15.21",
+    "@types/react": "^19.0.12",
+    "@types/react-dom": "^19.0.4",
+    "eslint": "^9.27.0",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.32.1"
   }
 }

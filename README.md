@@ -34,8 +34,14 @@ Green pilot gates currently rely on:
 
 ```bash
 npm test
- git diff --check
+npm run typecheck
+npm run lint
+npm run build
+npm run audit:high
+git diff --check
 ```
+
+Build/typecheck/lint metadata has been restored for the focused `src/frontend` snapshot; browser/userflow E2E remains a production gate.
 
 Production blockers are tracked in:
 

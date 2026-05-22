@@ -16,8 +16,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/frontend --max-warnings=0",
     "build": "next build src/frontend",
+    "test:userflow-smoke": "node scripts/test-actionbridge-userflow-smoke.mjs",
     "audit:high": "node scripts/audit-actionbridge-high.mjs",
-    "check": "npm test && npm run typecheck && npm run lint && npm run build && npm run audit:high && git diff --check",
+    "check": "npm test && npm run typecheck && npm run lint && npm run build && npm run test:userflow-smoke && npm run audit:high && git diff --check",
     "test:behavioral-modules": "node scripts/test-actionbridge-behavioral-modules.mjs"
   },
   "engines": {

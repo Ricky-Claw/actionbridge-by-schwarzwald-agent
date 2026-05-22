@@ -54,7 +54,7 @@ ActionBridge is suitable for controlled pilot continuation only. This checklist 
 - [x] `npm run build`. _Runs `next build src/frontend` successfully._
 - [x] Typecheck. _Runs `tsc --noEmit` successfully._
 - [x] Lint. _Runs `eslint src/frontend --max-warnings=0` successfully._
-- [ ] Browser/userflow E2E.
+- [x] Browser/userflow E2E. _Production Next smoke starts the built frontend locally and verifies core ActionBridge routes, route intent copy, connector-only UX anchors, and absence of obvious secret-like leakage._
 
 ## Gate 6 — Product Boundary
 - [x] Connector-only scope documented.

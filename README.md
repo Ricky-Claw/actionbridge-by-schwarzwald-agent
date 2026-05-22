@@ -37,11 +37,12 @@ npm test
 npm run typecheck
 npm run lint
 npm run build
+npm run test:userflow-smoke
 npm run audit:high
 git diff --check
 ```
 
-Build/typecheck/lint metadata has been restored for the focused `src/frontend` snapshot; browser/userflow E2E remains a production gate.
+Build/typecheck/lint metadata has been restored for the focused `src/frontend` snapshot; browser/userflow smoke now gates the core ActionBridge route journey.
 
 Production blockers are tracked in:
 
@@ -58,7 +59,7 @@ Production blockers are tracked in:
 - ActionBridge API + frontend skeleton code.
 - Policy/redaction/HTTP/website/webhook guardrails.
 - Supabase migrations for connectors/actions/approvals/audit/execution/error state.
-- Contract/security/demo-flow test scripts.
+- Contract/security/demo-flow/userflow-smoke test scripts.
 - Agent operating model: Breaker, Sentinel, Nexus.
 
 ## Team model

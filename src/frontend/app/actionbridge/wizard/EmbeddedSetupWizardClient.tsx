@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 
-type ConnectorType = 'website' | 'webhook' | 'whatsapp_business';
+type ConnectorType = 'website' | 'webhook' | 'whatsapp_business' | 'backend_bridge';
 
 type SubmitState = {
   status: 'idle' | 'submitting' | 'success' | 'error';
@@ -22,6 +22,10 @@ const connectorCopy: Record<ConnectorType, { label: string; helper: string }> = 
   whatsapp_business: {
     label: 'WhatsApp Business',
     helper: 'Phone Number ID, WABA ID und API-Version. Meta Token/OAuth wird nicht im Kundenformular angenommen.',
+  },
+  backend_bridge: {
+    label: 'WordPress / Backend Bridge',
+    helper: 'Serverseitiges Plugin oder SDK verbinden. Pairing-Code wird einmal angezeigt; Execution bleibt bis Freigabe aus.',
   },
 };
 
@@ -67,6 +71,12 @@ function buildConnectorPayload(type: ConnectorType, form: FormData) {
     if (!isSafeWebhookEndpointPath(endpointPath)) throw new Error('Endpoint Path muss relativ sein und darf keine Query, Hash, Backslash oder absolute URL enthalten.');
     return { name, type, baseUrl, endpointPath };
   }
+  if (type === 'backend_bridge') {
+    const baseUrl = String(form.get('backendBaseUrl') || '').trim();
+    const installMode = String(form.get('installMode') || 'admin_plugin').trim();
+    if (!isSafeHttpsUrl(baseUrl)) throw new Error('Backend/WordPress URL muss HTTPS sein und darf keine Userinfo/private Hostnames enthalten.');
+    return { name, type, baseUrl, installMode };
+  }
   const phoneNumberId = String(form.get('phoneNumberId') || '').trim();
   const businessAccountId = String(form.get('businessAccountId') || '').trim();
   const apiVersion = String(form.get('apiVersion') || 'v20.0').trim();
@@ -90,6 +100,7 @@ export default function EmbeddedSetupWizardClient() {
   const safeFields = useMemo(() => {
     if (connectorType === 'website') return ['name', 'websiteUrl'];
     if (connectorType === 'webhook') return ['name', 'webhookOrigin', 'endpointPath'];
+    if (connectorType === 'backend_bridge') return ['name', 'backendBaseUrl', 'installMode'];
     return ['name', 'phoneNumberId', 'businessAccountId', 'apiVersion'];
   }, [connectorType]);
 
@@ -119,14 +130,40 @@ export default function EmbeddedSetupWizardClient() {
         });
         return;
       }
+      let pairing: Record<string, unknown> | undefined;
+      if (connectorType === 'backend_bridge' && body.connector?.id) {
+        const pairingResponse = await fetch('/api/actionbridge/backend-bridge/pairing', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ connectorId: body.connector.id }),
+        });
+        const pairingBody = await pairingResponse.json().catch(() => ({}));
+        if (!pairingResponse.ok) {
+          setSubmitState({
+            status: 'error',
+            message: typeof pairingBody.error === 'string' ? pairingBody.error : 'ACTIONBRIDGE_BACKEND_BRIDGE_PAIRING_CREATE_FAILED',
+            redactedPayload: { id: body.connector.id, type: body.connector.type },
+          });
+          return;
+        }
+        pairing = {
+          id: pairingBody.pairing?.id,
+          code: pairingBody.pairing?.code,
+          expiresAt: pairingBody.pairing?.expiresAt,
+          warning: pairingBody.pairing?.warning,
+        };
+      }
       setSubmitState({
         status: 'success',
-        message: 'Connector-Draft erstellt. Network Execution bleibt aus, bis Verifizierung/Policy/Safety bereit sind.',
+        message: connectorType === 'backend_bridge'
+          ? 'Backend-Bridge Draft erstellt. Pairing-Code jetzt im WordPress Plugin/SDK einfügen. Nach Signed Health: verbunden, aber noch nicht aktiv.'
+          : 'Connector-Draft erstellt. Network Execution bleibt aus, bis Verifizierung/Policy/Safety bereit sind.',
         redactedPayload: {
           id: body.connector?.id,
           type: body.connector?.type,
           embeddedStatus: body.connector?.embeddedSetup?.status,
           networkExecutionEnabled: body.connector?.networkExecutionEnabled,
+          pairing,
         },
       });
     } catch {
@@ -189,6 +226,26 @@ export default function EmbeddedSetupWizardClient() {
                 Endpoint Path
                 <input name="endpointPath" placeholder="/hooks/actionbridge" className="mt-2 w-full rounded-xl border border-white/10 bg-stone-950 px-3 py-3 text-sm outline-none ring-emerald-300/30 focus:ring" />
               </label>
+            </div>
+          )}
+
+          {connectorType === 'backend_bridge' && (
+            <div className="mt-4 grid gap-4 sm:grid-cols-[1fr_220px]">
+              <label className="block text-sm font-semibold text-stone-200">
+                WordPress / Backend URL
+                <input required name="backendBaseUrl" placeholder="https://kunde.de" className="mt-2 w-full rounded-xl border border-white/10 bg-stone-950 px-3 py-3 text-sm outline-none ring-emerald-300/30 focus:ring" />
+              </label>
+              <label className="block text-sm font-semibold text-stone-200">
+                Installationsweg
+                <select name="installMode" defaultValue="admin_plugin" className="mt-2 w-full rounded-xl border border-white/10 bg-stone-950 px-3 py-3 text-sm outline-none ring-emerald-300/30 focus:ring">
+                  <option value="admin_plugin">WordPress Plugin</option>
+                  <option value="server_sdk">Server SDK</option>
+                  <option value="database_proxy">DB Proxy</option>
+                </select>
+              </label>
+              <p className="sm:col-span-2 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3 text-xs leading-5 text-amber-100">
+                Pairing-Code wird einmal angezeigt. Nach dem Einfügen im Plugin meldet Signed Health die Verbindung. Aktionen bleiben deaktiviert, bis Permissions explizit freigegeben sind.
+              </p>
             </div>
           )}
 

@@ -8,8 +8,9 @@ import { isPrivateActionBridgeHost } from '@/lib/actionbridge/http-connector';
 import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
 import { createActionBridgeWhatsAppBusinessDraft, summarizeActionBridgeWhatsAppCapabilities } from '@/lib/actionbridge/whatsapp-business-adapter';
 import { createActionBridgeEmbeddedSetupDescriptor } from '@/lib/actionbridge/embedded-setup-ux';
+import { createActionBridgeBackendBridgeCapabilities, createActionBridgeBackendBridgeSetupContract, normalizeActionBridgeBackendBridgeInstallMode } from '@/lib/actionbridge/backend-bridge';
 
-const ACTIONBRIDGE_CONNECTOR_TYPES = new Set(['http', 'website', 'webhook', 'whatsapp_business']);
+const ACTIONBRIDGE_CONNECTOR_TYPES = new Set(['http', 'website', 'webhook', 'whatsapp_business', 'backend_bridge']);
 const ACTIONBRIDGE_AUTH_MODES = new Set(['none', 'bearer', 'api_key', 'basic']);
 
 function normalizeActionBridgeAllowedOrigins(value: unknown): string[] | null {
@@ -69,7 +70,7 @@ function parseActionBridgeConnectorDraft(body: Record<string, unknown>) {
     : typeof body.auth_mode === 'string' && ACTIONBRIDGE_AUTH_MODES.has(body.auth_mode)
       ? body.auth_mode
       : 'none';
-  const authMode = type === 'website' ? 'none' : type === 'whatsapp_business' ? 'bearer' : requestedAuthMode;
+  const authMode = type === 'website' ? 'none' : type === 'whatsapp_business' || type === 'backend_bridge' ? 'bearer' : requestedAuthMode;
   const endpointPath = type === 'webhook'
     ? normalizeActionBridgeWebhookEndpointPath(body.endpointPath ?? body.endpoint_path)
     : '/';
@@ -90,7 +91,7 @@ function parseActionBridgeConnectorDraft(body: Record<string, unknown>) {
   const allowedOrigins = normalizeActionBridgeAllowedOrigins(
     type === 'whatsapp_business'
       ? whatsappDraft?.allowedOrigins
-      : body.allowedOrigins ?? body.allowed_origins ?? (type === 'website' ? [parsedUrl.origin] : undefined)
+      : body.allowedOrigins ?? body.allowed_origins ?? (type === 'website' ? [parsedUrl.origin] : type === 'backend_bridge' ? [parsedUrl.origin] : undefined)
   );
   if (!allowedOrigins) return null;
 
@@ -104,6 +105,11 @@ function parseActionBridgeConnectorDraft(body: Record<string, unknown>) {
     allowed_origins: allowedOrigins,
     capabilities: type === 'whatsapp_business'
       ? whatsappDraft!.capabilities
+      : type === 'backend_bridge'
+        ? createActionBridgeBackendBridgeCapabilities({
+          installMode: body.installMode ?? body.install_mode,
+          requestedCapabilities: body.capabilities,
+        })
       : type === 'website'
       ? ['public_page_extract', 'same_origin_route_discovery', 'metadata_extract', 'form_inventory', 'no_form_submit', 'networkExecution:false']
       : type === 'webhook'
@@ -136,6 +142,11 @@ function serializeActionBridgeConnector(connector: any) {
     permissionStatus: connector.permission_status,
     endpointPath: connector.endpoint_path || '/',
     webhookSigningMode: connector.webhook_signing_mode || 'unsigned_pilot',
+    backendBridge: connector.type === 'backend_bridge' ? createActionBridgeBackendBridgeSetupContract({
+      connectorId: connector.id,
+      installMode: normalizeActionBridgeBackendBridgeInstallMode((connector.capabilities || [])
+        .find((capability: string) => capability.startsWith('install_mode:'))?.replace('install_mode:', '')),
+    }) : undefined,
     whatsappBusiness: whatsapp?.cloudApi ? whatsapp : undefined,
     embeddedSetup: createActionBridgeEmbeddedSetupDescriptor({
       connector: {

@@ -470,6 +470,7 @@ for (const token of [
   'ACTIONBRIDGE_TRUSTED_PROXY_REQUIRED',
   'per_tenant_per_connector_per_token_dimensions',
   'decideActionBridgeWebhookDeliveryThrottle',
+  "backendBridgePairing: { name: 'backendBridgePairing'",
 ]) {
   if (rateLimitSource.includes(token)) pass(`rate limit source token: ${token}`);
   else fail(`rate limit source token missing: ${token}`);
@@ -529,6 +530,89 @@ for (const [label, pattern] of [
 ]) {
   if (pattern.test(alertDigestRoute)) pass(`operator alert digest behavior: ${label}`);
   else fail(`operator alert digest behavior: ${label}`);
+}
+
+const backendSdkSource = read('integrations/backend-sdk/typescript/src/index.ts');
+for (const [label, pattern] of [
+  ['SDK replay cache requires atomic setIfAbsent contract', /interface ActionBridgeReplayCache[\s\S]*setIfAbsent\(nonce: string, ttlSeconds: number\)/],
+  ['SDK verifies signature before consuming replay nonce', /const expected = signActionBridgeBackendRequest\(input\)[\s\S]*timingSafeEqual[\s\S]*setIfAbsent\(input\.nonce, 600\)/],
+  ['SDK length-checks signature before timingSafeEqual to avoid malformed-signature throws', /expectedBuffer\.length !== signatureBuffer\.length \|\| !crypto\.timingSafeEqual\(expectedBuffer, signatureBuffer\)/],
+]) {
+  if (pattern.test(backendSdkSource)) pass(`backend SDK hardening: ${label}`);
+  else fail(`backend SDK hardening: ${label}`);
+}
+
+const backendPairingRouteSource = read('src/frontend/app/api/actionbridge/backend-bridge/pairing/route.ts');
+for (const [label, pattern] of [
+  ['pairing consumption does not activate connector or mark safety pass', /\.update\(\{[\s\S]*secret_ref: secretRef,[\s\S]*safety_status: 'untested',[\s\S]*permission_status: 'draft'/],
+  ['pairing response returns shared secret once with explicit warning', /sharedSecret,[\s\S]*SHARED_SECRET_RETURNED_ONCE_STORE_SERVER_SIDE_ONLY/],
+]) {
+  if (pattern.test(backendPairingRouteSource)) pass(`backend bridge pairing hardening: ${label}`);
+  else fail(`backend bridge pairing hardening: ${label}`);
+}
+
+const backendPairingMigrationSource = read('supabase/migrations/20260521035000_actionbridge_backend_bridge_pairing.sql');
+for (const [label, pattern] of [
+  ['pairing RLS denies direct owner SELECT for sensitive digest/ref metadata', /actionbridge_backend_bridge_pairings_no_direct_owner_select[\s\S]*FOR SELECT USING \(false\)/],
+  ['pairing migration keeps shared secret as digest only', /shared_secret_digest TEXT[\s\S]*shared_secret_digest_check[\s\S]*\^sha256:\[a-f0-9\]\{64\}\$/],
+]) {
+  if (pattern.test(backendPairingMigrationSource)) pass(`backend bridge pairing migration hardening: ${label}`);
+  else fail(`backend bridge pairing migration hardening: ${label}`);
+}
+
+const wordpressSecuritySource = read('integrations/wordpress/actionbridge-wordpress/includes/class-actionbridge-security.php');
+for (const [label, pattern] of [
+  ['WordPress HMAC binds header connector id to stored connector id', /expected_connector_id[\s\S]*hash_equals\(\$expected_connector_id, \$connector_id\)[\s\S]*actionbridge_connector_mismatch/],
+  ['WordPress replay guard uses atomic add_option nonce insert instead of check-then-set', /remember_nonce_once[\s\S]*return add_option\(\$option, \(string\) time\(\), '', false\)/],
+]) {
+  if (pattern.test(wordpressSecuritySource)) pass(`WordPress bridge security hardening: ${label}`);
+  else fail(`WordPress bridge security hardening: ${label}`);
+}
+
+const backendBridgeHealthSource = read('src/frontend/app/api/actionbridge/backend-bridge/health/route.ts');
+for (const [label, pattern] of [
+  ['health route verifies HMAC before consuming replay nonce', /verifyActionBridgeBackendBridgeHealthSignature[\s\S]*if \(!verification\.ok\)[\s\S]*actionbridge_backend_bridge_health_nonces/],
+  ['health route blocks unsafe write-enabled plugin health', /verification\.health\.ok !== true \|\| verification\.health\.writesEnabled === true[\s\S]*ACTIONBRIDGE_BACKEND_BRIDGE_HEALTH_UNSAFE/],
+  ['health route marks connector connected-safe but not execution-active', /safety_status: 'pass',[\s\S]*permission_status: 'draft',[\s\S]*network_execution_enabled: false/],
+  ['health route writes redacted audit evidence', /backend_bridge\.health_verified[\s\S]*redactActionBridgeValue\(verification\.health\)[\s\S]*redacted: true/],
+]) {
+  if (pattern.test(backendBridgeHealthSource)) pass(`backend bridge signed health behavior: ${label}`);
+  else fail(`backend bridge signed health behavior: ${label}`);
+}
+
+const backendBridgePairingHelperSource = read('src/frontend/lib/actionbridge/backend-bridge-pairing.ts');
+for (const [label, pattern] of [
+  ['health signature helper length-checks before timingSafeEqual', /expectedBuffer\.length !== signatureBuffer\.length \|\| !crypto\.timingSafeEqual\(expectedBuffer, signatureBuffer\)/],
+  ['health signature payload binds connector, timestamp, nonce, and sanitized health digest', /createActionBridgeBackendBridgeHealthSignaturePayload[\s\S]*healthDigest[\s\S]*\[input\.connectorId, input\.timestamp, input\.nonce, healthDigest\]/],
+]) {
+  if (pattern.test(backendBridgePairingHelperSource)) pass(`backend bridge signed health helper: ${label}`);
+  else fail(`backend bridge signed health helper: ${label}`);
+}
+
+const backendHealthNonceMigrationSource = read('supabase/migrations/20260521041000_actionbridge_backend_bridge_health_nonces.sql');
+if (/actionbridge_backend_bridge_health_nonces[\s\S]*UNIQUE \(nonce_digest\)[\s\S]*FOR SELECT USING \(false\)/.test(backendHealthNonceMigrationSource)) {
+  pass('backend bridge signed health replay guard: nonce digests are unique and hidden from direct client reads');
+} else {
+  fail('backend bridge signed health replay guard: nonce migration is missing uniqueness or direct-read denial');
+}
+
+const wordpressClientSource = read('integrations/wordpress/actionbridge-wordpress/includes/class-actionbridge-client.php');
+for (const [label, pattern] of [
+  ['WordPress reports signed health immediately after pairing stores server-side secret', /update_option\('actionbridge_wp_settings', \$settings, false\)[\s\S]*report_signed_health\(\$settings\)/],
+  ['WordPress signed health uses shared-secret digest as HMAC key to match server verifier without sending raw secret', /shared_secret_digest = 'sha256:' \. hash\('sha256', \$shared_secret\)[\s\S]*hash_hmac\('sha256', \$payload, \$shared_secret_digest\)/],
+  ['WordPress signed health explicitly reports writes disabled', /private static function create_health_payload[\s\S]*'writesEnabled' => false/],
+]) {
+  if (pattern.test(wordpressClientSource)) pass(`WordPress bridge signed health client: ${label}`);
+  else fail(`WordPress bridge signed health client: ${label}`);
+}
+
+const wordpressCapabilitiesSource = read('integrations/wordpress/actionbridge-wordpress/includes/class-actionbridge-capabilities.php');
+const wordpressSettingsSource = read('integrations/wordpress/actionbridge-wordpress/includes/class-actionbridge-settings.php');
+if (/public static function allowed\(\): array \{[\s\S]*return \[\];[\s\S]*public static function planned/.test(wordpressCapabilitiesSource)
+  && /Pilot status:[\s\S]*signed health\/connectivity only[\s\S]*disabled=\"disabled\"[\s\S]*planned, disabled/.test(wordpressSettingsSource)) {
+  pass('WordPress bridge UX hardening: planned capabilities are visibly disabled and not advertised as executable');
+} else {
+  fail('WordPress bridge UX hardening: capabilities may still be advertised as executable');
 }
 
 process.exitCode = failed ? 1 : 0;

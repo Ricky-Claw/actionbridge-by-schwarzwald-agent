@@ -31,6 +31,8 @@ const requiredFiles = [
   'src/frontend/lib/actionbridge/webhook-signing.ts',
   'src/frontend/lib/actionbridge/embedded-setup-ux.ts',
   'src/frontend/lib/actionbridge/whatsapp-business-adapter.ts',
+  'src/frontend/lib/actionbridge/backend-bridge.ts',
+  'src/frontend/lib/actionbridge/backend-bridge-pairing.ts',
   'src/frontend/lib/actionbridge/domain-verification.ts',
   'src/frontend/lib/actionbridge/setup-links.ts',
   'src/frontend/lib/actionbridge/setup-session.ts',
@@ -336,6 +338,8 @@ const routeFiles = [
   'src/frontend/app/api/actionbridge/agent-tools/route.ts',
   'src/frontend/app/api/actionbridge/targets/route.ts',
   'src/frontend/app/api/actionbridge/ops/error-retention/route.ts',
+  'src/frontend/app/api/actionbridge/backend-bridge/pairing/route.ts',
+  'src/frontend/app/api/actionbridge/backend-bridge/health/route.ts',
 ];
 for (const file of routeFiles) {
   if (!exists(file)) fail(`Missing ActionBridge route: ${file}`);
@@ -362,6 +366,8 @@ if (!process.exitCode) {
   const agentToolsRoute = read('src/frontend/app/api/actionbridge/agent-tools/route.ts');
   const targetsRoute = read('src/frontend/app/api/actionbridge/targets/route.ts');
   const errorRetentionOpsRoute = read('src/frontend/app/api/actionbridge/ops/error-retention/route.ts');
+  const backendBridgePairingRoute = read('src/frontend/app/api/actionbridge/backend-bridge/pairing/route.ts');
+  const backendBridgeHealthRoute = read('src/frontend/app/api/actionbridge/backend-bridge/health/route.ts');
   for (const [name, source] of [['actions', actionsRoute], ['connectors', connectorsRoute], ['execute', executeRoute], ['approvals', approvalsRoute], ['audit', auditRoute], ['executions', executionsRoute], ['errors', errorsRoute], ['quarantine', quarantineRoute]]) {
     if (!source.includes('createClient')) fail(`${name} route must use Supabase server auth`);
     if (!source.includes('auth.getUser')) fail(`${name} route must require authenticated user`);
@@ -377,7 +383,7 @@ if (!process.exitCode) {
   for (const token of ['actionbridge_targets', 'requireTenantMembership', 'actionbridge_tenant_memberships', '.eq(\'tenant_id\', tenantId)', 'createActionBridgeTargetsFromUrls', 'createActionBridgeTargetToolCatalog', 'networkExecution: false']) {
     if (!targetsRoute.includes(token)) fail(`targets route missing ${token}`);
   }
-  if (!connectorsRoute.includes("new Set(['http', 'website', 'webhook', 'whatsapp_business'])")) fail('connectors route must allow website, webhook, and WhatsApp Business connector types');
+  if (!connectorsRoute.includes("new Set(['http', 'website', 'webhook', 'whatsapp_business', 'backend_bridge'])")) fail('connectors route must allow website, webhook, WhatsApp Business, and backend bridge connector types');
   if (!connectorsRoute.includes('public_page_extract') || !connectorsRoute.includes('no_form_submit')) fail('website connectors must persist public extraction guardrail capabilities');
   if (!connectorsRoute.includes('parsedUrl.username') || !connectorsRoute.includes('parsedUrl.password')) fail('connectors route must reject URL userinfo secrets');
   if (!connectorsRoute.includes("const authMode = type === 'website' ? 'none'")) fail('website connectors must force auth_mode none');
@@ -416,6 +422,9 @@ if (!process.exitCode) {
   }
   for (const token of ['ACTIONBRIDGE_RETENTION_CRON_SECRET', 'ACTIONBRIDGE_RETENTION_USER_IDS', 'ACTIONBRIDGE_RETENTION_DELETE_ENABLED', 'x-actionbridge-retention-confirm', 'DELETE_EXPIRED_ACTIONBRIDGE_ERROR_LOGS', 'pruneActionBridgeResolvedErrorLogs', 'error_log.retention_cron_dry_run', 'error_log.retention_cron_deleted', 'createCoreServiceClient']) {
     if (!errorRetentionOpsRoute.includes(token)) fail(`error retention ops route missing scheduled-retention token ${token}`);
+  }
+  for (const token of ['actionbridge_backend_bridge_pairings', 'createActionBridgeBackendBridgePairingDraft', 'digestActionBridgeBackendBridgePairingCode', 'backend_bridge.pairing_created', 'backend_bridge.pairing_consumed', 'SHARED_SECRET_RETURNED_ONCE_STORE_SERVER_SIDE_ONLY', 'ACTIONBRIDGE_RATE_LIMITED']) {
+    if (!backendBridgePairingRoute.includes(token)) fail(`backend bridge pairing route missing ${token}`);
   }
   for (const token of ['actionbridge_connector_quarantine', ".eq('user_id', user!.id)", 'toActionBridgeConnectorQuarantineView', 'export async function GET', 'export async function POST', 'export async function PATCH', 'connector_quarantine.paused', 'connector_quarantine.resolved', 'redactActionBridgeValue']) {
     if (!quarantineRoute.includes(token)) fail(`quarantine route missing safe operator token ${token}`);
@@ -870,6 +879,20 @@ if (exists('README.md')) {
 
 
 if (exists('docs/actionbridge-work-batch-2026-05-15-signing-readiness.md')) {
+  const wizardClient = read('src/frontend/app/actionbridge/wizard/EmbeddedSetupWizardClient.tsx');
+  for (const token of ['backend_bridge', 'WordPress / Backend Bridge', '/api/actionbridge/backend-bridge/pairing', 'Pairing-Code', 'Signed Health', 'installMode']) {
+    if (!wizardClient.includes(token)) fail(`Embedded setup wizard missing backend bridge customer flow token ${token}`);
+  }
+  if (!process.exitCode) pass('Embedded setup wizard creates backend bridge drafts and one-time pairing codes for customer plugin flow');
+
+  const connectorStatusPage = read('src/frontend/app/actionbridge/connectors/ActionBridgeConnectorsClient.tsx');
+  for (const token of ['Connector Status', 'Pairing nötig', 'verbunden · wartet auf Freigabe', 'Signed Health wurde bestätigt', '/api/actionbridge/connectors', 'Neuen Connector verbinden']) {
+    if (!connectorStatusPage.includes(token)) fail(`Connector status UI missing customer-readable status token ${token}`);
+  }
+  const actionbridgeIndex = read('src/frontend/app/actionbridge/page.tsx');
+  if (!actionbridgeIndex.includes('/actionbridge/connectors')) fail('ActionBridge index must link connector status page');
+  if (!process.exitCode) pass('Connector status UI explains draft, pairing, signed-health, permission, active, and paused states');
+
   const batch = read('docs/actionbridge-work-batch-2026-05-15-signing-readiness.md');
   for (const token of ['Tasks Covered', 'Webhook-v1 HMAC secret-ref resolver', 'Explicit `webhook_signing_mode` migration', 'Production readiness checklist', 'Boundaries Preserved']) {
     if (!batch.includes(token)) fail(`work batch doc missing ${token}`);
@@ -882,6 +905,21 @@ if (exists('docs/actionbridge-work-batch-2026-05-15-signing-readiness.md')) {
 for (const [file, tokens, label] of [
   ['src/frontend/lib/actionbridge/webhook-quarantine.ts', ['getActiveActionBridgeConnectorQuarantine', 'persistActionBridgeWebhookFailureQuarantine', 'redactActionBridgeValue', 'webhook_repeated_failures'], 'ActionBridge webhook quarantine helper provides durable redacted pause state'],
   ['supabase/migrations/20260516011500_actionbridge_connector_quarantine.sql', ['actionbridge_connector_quarantine', 'webhook_repeated_failures', 'idx_actionbridge_connector_quarantine_one_active', 'ENABLE ROW LEVEL SECURITY'], 'ActionBridge connector quarantine migration defines durable owner-scoped pause state'],
+  ['src/frontend/lib/actionbridge/backend-bridge.ts', ['backend_bridge.v1', 'customer_consent_required', 'server_secret_ref_required', 'no_browser_secrets', 'forbiddenClientData'], 'ActionBridge backend bridge helper documents consented server-side setup controls'],
+  ['src/frontend/lib/actionbridge/backend-bridge-pairing.ts', ['abbp_', 'digestActionBridgeBackendBridgePairingCode', 'abbs_', 'digestActionBridgeBackendBridgeSharedSecret', 'createActionBridgeBackendBridgeSecretRef', 'sanitizeActionBridgeBackendBridgePluginInfo', 'verifyActionBridgeBackendBridgeHealthSignature', 'digestActionBridgeBackendBridgeHealthNonce'], 'ActionBridge backend bridge pairing helper creates one-time digest-backed pairing material and signed health verification'],
+  ['src/frontend/app/api/actionbridge/backend-bridge/health/route.ts', ['verifyActionBridgeBackendBridgeHealthSignature', 'actionbridge_backend_bridge_health_nonces', "safety_status: 'pass'", "permission_status: 'draft'", 'network_execution_enabled: false', 'backend_bridge.health_verified'], 'ActionBridge backend bridge health route verifies signed plugin health without activating execution'],
+  ['supabase/migrations/20260521041000_actionbridge_backend_bridge_health_nonces.sql', ['actionbridge_backend_bridge_health_nonces', 'UNIQUE (nonce_digest)', 'FOR SELECT USING (false)', 'nonce_digest_check'], 'ActionBridge backend bridge health nonce migration provides atomic replay guard'],
+  ['supabase/migrations/20260521033000_actionbridge_backend_bridge_connector.sql', ['backend_bridge', 'admin_plugin', 'server_sdk', 'database_proxy', 'Raw DB credentials'], 'ActionBridge backend bridge migration enables scaffold without browser secrets'],
+  ['supabase/migrations/20260521035000_actionbridge_backend_bridge_pairing.sql', ['actionbridge_backend_bridge_pairings', 'code_digest', 'shared_secret_digest', 'status IN', 'consumed_at', 'ENABLE ROW LEVEL SECURITY'], 'ActionBridge backend bridge pairing migration stores digest-only one-time codes and shared-secret verifier digests'],
+  ['docs/specs/actionbridge-backend-admin-bridge.md', ['Admin plugin / server SDK path', 'Database proxy path', 'What the browser script does', 'Required controls'], 'ActionBridge backend/admin bridge spec defines legal connection paths'],
+  ['docs/specs/actionbridge-wordpress-plugin-mvp.md', ['WordPress/WooCommerce Plugin MVP', 'create blog post **draft** only', 'manage_options', 'HMAC signature'], 'ActionBridge WordPress plugin MVP spec defines safe admin plugin boundary'],
+  ['docs/specs/actionbridge-backend-sdk-contract.md', ['Universal Backend Bridge SDK Contract', 'GET /actionbridge/health', 'POST /actionbridge/execute', 'backend.write_draft', 'database.read_model'], 'ActionBridge universal backend SDK contract defines adapter-neutral bridge'],
+  ['integrations/backend-sdk/typescript/src/index.ts', ['ActionBridgeBackendRegistration', 'sanitizeActionBridgeBackendCapability', 'verifyActionBridgeBackendRequest', 'dispatchActionBridgeBackendCapability', 'ACTIONBRIDGE_REPLAY_BLOCKED', 'ACTIONBRIDGE_WRITE_REQUIRES_APPROVED_LIVE_DISPATCH'], 'ActionBridge backend SDK scaffold provides signed generic capability dispatch'],
+  ['integrations/wordpress/actionbridge-wordpress/actionbridge-wordpress.php', ['Plugin Name: ActionBridge for WordPress', 'register_uninstall_hook', 'ActionBridge_WP_Settings::init', 'ActionBridge_WP_REST::init'], 'ActionBridge WordPress plugin scaffold boots settings and REST'],
+  ['integrations/wordpress/actionbridge-wordpress/includes/class-actionbridge-security.php', ['x-actionbridge-signature', 'x-actionbridge-timestamp', 'x-actionbridge-nonce', 'hash_hmac', 'hash_equals', 'actionbridge_replay_blocked'], 'ActionBridge WordPress plugin verifies signed non-replayed requests'],
+  ['integrations/wordpress/actionbridge-wordpress/includes/class-actionbridge-client.php', ['exchange_pairing_code', 'wp_remote_request', 'PATCH', 'pluginInfo', 'sharedSecret', 'secretRef', 'report_signed_health', 'api/actionbridge/backend-bridge/health', 'hash_hmac', 'writesEnabled'], 'ActionBridge WordPress plugin exchanges one-time pairing codes and reports signed health server-side'],
+  ['integrations/wordpress/actionbridge-wordpress/includes/class-actionbridge-rest.php', ['actionbridge/v1', '/health', 'siteUrlDigest', 'writesEnabled', 'blog_draft_disabled'], 'ActionBridge WordPress plugin exposes health only and keeps writes disabled'],
+  ['integrations/wordpress/actionbridge-wordpress/includes/class-actionbridge-settings.php', ['manage_options', 'settings_fields', 'enabled_capabilities', 'Production must use one-time pairing'], 'ActionBridge WordPress plugin admin settings are permission-gated'],
 ]) {
   if (!exists(file)) fail(`Missing ${file}`);
   else {

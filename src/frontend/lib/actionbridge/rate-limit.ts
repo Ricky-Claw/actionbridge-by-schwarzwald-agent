@@ -23,6 +23,7 @@ const DEFAULT_POLICIES: Record<string, ActionBridgeRateLimitPolicy> = {
   setupSession: { name: 'setupSession', windowMs: 60_000, max: 30, scope: 'pilot_process_local' },
   bridgeHandshake: { name: 'bridgeHandshake', windowMs: 60_000, max: 20, scope: 'pilot_process_local' },
   domainVerification: { name: 'domainVerification', windowMs: 60_000, max: 20, scope: 'pilot_process_local' },
+  backendBridgePairing: { name: 'backendBridgePairing', windowMs: 60_000, max: 10, scope: 'pilot_process_local' },
   webhookDelivery: { name: 'webhookDelivery', windowMs: 60_000, max: 30, scope: 'pilot_process_local' },
   webhookFailureQuarantine: { name: 'webhookFailureQuarantine', windowMs: 15 * 60_000, max: 5, scope: 'pilot_process_local' },
 };

@@ -54,7 +54,7 @@ export type ActionBridgePermissionStatus = 'draft' | 'active' | 'paused' | 'revo
 export interface ActionBridgeConnector {
   id: string;
   tenantId: string;
-  type: 'http' | 'website' | 'webhook' | 'whatsapp_business';
+  type: 'http' | 'website' | 'webhook' | 'whatsapp_business' | 'backend_bridge';
   name: string;
   baseUrl: string;
   authMode: 'none' | 'bearer' | 'api_key' | 'basic';

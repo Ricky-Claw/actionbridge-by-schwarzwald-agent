@@ -1,10 +1,11 @@
 export const dynamic = 'force-dynamic';
 
+import ActionBridgeSetupSessionClient from './ActionBridgeSetupSessionClient';
+
 type SearchParams = Promise<{ token?: string }>;
 
 export default async function ActionBridgeCustomerSetupPage({ searchParams }: { searchParams: SearchParams }) {
   const { token = '' } = await searchParams;
-  const maskedToken = token.startsWith('absl_') ? `${token.slice(0, 9)}…shown-once` : '';
 
   return (
     <main className="min-h-screen bg-neutral-950 px-6 py-10 text-neutral-100">
@@ -18,19 +19,12 @@ export default async function ActionBridgeCustomerSetupPage({ searchParams }: { 
           </p>
         </header>
 
-        <section className="rounded-3xl border border-neutral-800 bg-neutral-900/70 p-6 shadow-2xl">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-xl font-semibold">1. Setup session</h2>
-              <p className="text-sm text-neutral-400">The public token is used only to resolve this setup session.</p>
-            </div>
-            <code className="rounded-full bg-neutral-950 px-4 py-2 text-sm text-emerald-200">{maskedToken || 'token required'}</code>
-          </div>
-          <p className="mt-4 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
-            Security rule: the UI must never display token digests, service-role data, raw connector internals,
-            idempotency keys, secrets, or private tenant fields.
-          </p>
-        </section>
+        <ActionBridgeSetupSessionClient token={token} />
+
+        <p className="rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
+          Security rule: the UI must never display token digests, service-role data, raw connector internals,
+          idempotency keys, secrets, or private tenant fields.
+        </p>
 
         <div className="grid gap-5 md:grid-cols-3">
           <section className="rounded-3xl border border-neutral-800 bg-neutral-900 p-5">
@@ -46,10 +40,9 @@ export default async function ActionBridgeCustomerSetupPage({ searchParams }: { 
           <section className="rounded-3xl border border-neutral-800 bg-neutral-900 p-5">
             <h2 className="font-semibold text-emerald-200">3. Bridge install</h2>
             <p className="mt-2 text-sm text-neutral-300">Install one connected-only script on the approved origin.</p>
-            <pre className="mt-4 overflow-auto rounded-2xl bg-neutral-950 p-3 text-xs text-neutral-300">
-{`<script src="https://actionbridge.schwarzwald-agent.de/actionbridge/bridge.js"
-  data-setup-token="${maskedToken || 'absl_...'}" async></script>`}
-            </pre>
+            <p className="mt-4 rounded-2xl bg-neutral-950 p-3 text-xs text-neutral-300">
+              The live API session above returns the exact bridge snippet with the setup token masked in the UI.
+            </p>
           </section>
 
           <section className="rounded-3xl border border-neutral-800 bg-neutral-900 p-5">

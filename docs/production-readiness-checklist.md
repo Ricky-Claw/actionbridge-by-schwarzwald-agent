@@ -62,7 +62,7 @@ ActionBridge is suitable for controlled pilot continuation only. This checklist 
 - [x] Schwarzwald-Agent integration explicitly delayed until standalone DoD.
 - [x] Embedded setup-plugin UX boundary documented.
 - [ ] Embedded setup wizard UI implemented.
-- [ ] Standalone setup UX consumes real API state instead of explanatory static pages.
+- [x] Standalone setup UX consumes real API state instead of explanatory static pages. _Customer setup page now resolves the public setup token through `/api/actionbridge/setup-session`, renders target origin/status/expiry, API-provided verification methods, masked bridge snippet, and capability choices, and fails closed when the session is missing or invalid._
 - [x] Operator-facing smoke runbook for pilot.
 
 ## Rule

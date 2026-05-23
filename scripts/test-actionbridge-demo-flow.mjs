@@ -82,6 +82,12 @@ if (read('src/frontend/app/actionbridge/operator/page.tsx').includes('method="po
   fail('Operator shell must not use native HTML POST because setup-links expects JSON');
 } else pass('Operator shell avoids broken native POST to JSON endpoint');
 
+const setupClient = read('src/frontend/app/actionbridge/setup/ActionBridgeSetupSessionClient.tsx');
+for (const token of ['data-actionbridge-embedded-setup-wizard', 'parseEmbeddedSetupDescriptor', 'Dieser Wizard sammelt nur lokale Auswahlentscheidungen', 'aktiviert keine Execution']) {
+  if (setupClient.includes(token)) pass(`Embedded setup wizard UI includes fail-closed marker: ${token}`);
+  else fail(`Embedded setup wizard UI missing fail-closed marker: ${token}`);
+}
+
 const setupSession = read('src/frontend/lib/actionbridge/setup-session.ts');
 const bridgeHandshake = read('src/frontend/lib/actionbridge/bridge-handshake.ts');
 if (setupSession.includes('data-setup-token')) pass('Setup session snippet passes setup token to bridge script');

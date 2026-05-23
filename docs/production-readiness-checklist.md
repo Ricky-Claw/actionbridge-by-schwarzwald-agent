@@ -61,7 +61,7 @@ ActionBridge is suitable for controlled pilot continuation only. This checklist 
 - [x] No CRM/lead inbox/product drift.
 - [x] Schwarzwald-Agent integration explicitly delayed until standalone DoD.
 - [x] Embedded setup-plugin UX boundary documented.
-- [ ] Embedded setup wizard UI implemented.
+- [x] Embedded setup wizard UI implemented. _Customer setup page now renders an embedded setup wizard from the API-provided `actionbridge.embedded_setup.v1` descriptor, lets customers choose verification method/capability intents locally, and keeps activation fail-closed until server verification, bridge handshake, capability API, approvals, and audit controls pass._
 - [x] Standalone setup UX consumes real API state instead of explanatory static pages. _Customer setup page now resolves the public setup token through `/api/actionbridge/setup-session`, renders target origin/status/expiry, API-provided verification methods, masked bridge snippet, and capability choices, and fails closed when the session is missing or invalid._
 - [x] Operator-facing smoke runbook for pilot.
 

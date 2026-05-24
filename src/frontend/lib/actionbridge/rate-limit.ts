@@ -19,6 +19,15 @@ export interface ActionBridgeRateLimitResult {
   response?: NextResponse;
 }
 
+export type ActionBridgeDistributedRateLimitProvider = 'upstash_redis_rest';
+
+export interface ActionBridgeDistributedRateLimitConfig {
+  configured: boolean;
+  provider: ActionBridgeDistributedRateLimitProvider | 'none';
+  endpointConfigured: boolean;
+  tokenConfigured: boolean;
+}
+
 const DEFAULT_POLICIES: Record<string, ActionBridgeRateLimitPolicy> = {
   setupSession: { name: 'setupSession', windowMs: 60_000, max: 30, scope: 'pilot_process_local' },
   bridgeHandshake: { name: 'bridgeHandshake', windowMs: 60_000, max: 20, scope: 'pilot_process_local' },
@@ -53,6 +62,20 @@ export const ACTIONBRIDGE_PRODUCTION_RATE_LIMIT_REQUIREMENTS = [
   'success_and_denial_headers',
   'redacted_rate_limit_telemetry',
 ] as const;
+
+export function getActionBridgeDistributedRateLimitConfig(): ActionBridgeDistributedRateLimitConfig {
+  const provider = process.env.ACTIONBRIDGE_DISTRIBUTED_RATE_LIMIT_PROVIDER === 'upstash_redis_rest'
+    ? 'upstash_redis_rest'
+    : 'none';
+  const endpointConfigured = Boolean(process.env.ACTIONBRIDGE_UPSTASH_REDIS_REST_URL);
+  const tokenConfigured = Boolean(process.env.ACTIONBRIDGE_UPSTASH_REDIS_REST_TOKEN);
+  return {
+    configured: provider === 'upstash_redis_rest' && endpointConfigured && tokenConfigured,
+    provider,
+    endpointConfigured,
+    tokenConfigured,
+  };
+}
 
 function digestKey(value: string): string {
   return `sha256:${createHash('sha256').update(value).digest('hex').slice(0, 16)}`;
@@ -101,6 +124,7 @@ export function decideActionBridgeRateLimit(input: {
   const nowMs = input.nowMs ?? Date.now();
   cleanupExpiredPilotBuckets(nowMs);
   const identity = getActionBridgeTrustedClientIdentity(input.request);
+  const distributedConfig = getActionBridgeDistributedRateLimitConfig();
   const rawKey = `${input.policy.name}|${clientKey(input.request)}|${input.discriminator || ''}`;
   const keyDigest = digestKey(rawKey);
   const bucketKey = `${input.policy.name}:${keyDigest}`;
@@ -129,6 +153,34 @@ export function decideActionBridgeRateLimit(input: {
           retryAfterSeconds: 60,
           resetAt,
           trustedProxyHeader: ACTIONBRIDGE_TRUSTED_PROXY_HEADER,
+        },
+      }, {
+        status: 503,
+        headers: {
+          'Retry-After': '60',
+          ...createActionBridgeRateLimitHeaders({ policyName: input.policy.name, remaining: 0, resetAt }),
+        },
+      }),
+    };
+  }
+
+  if (ACTIONBRIDGE_RATE_LIMIT_MODE === 'production_distributed_required' && !distributedConfig.configured) {
+    return {
+      ok: false,
+      keyDigest,
+      remaining: 0,
+      resetAt,
+      retryAfterSeconds: 60,
+      response: NextResponse.json({
+        error: 'ACTIONBRIDGE_DISTRIBUTED_RATE_LIMIT_STORE_REQUIRED',
+        rateLimit: {
+          policy: input.policy.name,
+          keyDigest,
+          retryAfterSeconds: 60,
+          resetAt,
+          provider: distributedConfig.provider,
+          endpointConfigured: distributedConfig.endpointConfigured,
+          tokenConfigured: distributedConfig.tokenConfigured,
         },
       }, {
         status: 503,

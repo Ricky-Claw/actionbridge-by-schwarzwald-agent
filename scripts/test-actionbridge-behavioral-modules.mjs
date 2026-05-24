@@ -615,4 +615,14 @@ if (/public static function allowed\(\): array \{[\s\S]*return \[\];[\s\S]*publi
   fail('WordPress bridge UX hardening: capabilities may still be advertised as executable');
 }
 
+const rateLimitGuardrailSource = read('src/frontend/lib/actionbridge/rate-limit.ts');
+for (const [label, pattern] of [
+  ['production distributed mode has an explicit provider config gate', /getActionBridgeDistributedRateLimitConfig[\s\S]*ACTIONBRIDGE_DISTRIBUTED_RATE_LIMIT_PROVIDER[\s\S]*upstash_redis_rest[\s\S]*ACTIONBRIDGE_UPSTASH_REDIS_REST_URL[\s\S]*ACTIONBRIDGE_UPSTASH_REDIS_REST_TOKEN/],
+  ['production distributed mode fails closed when the store is not configured', /ACTIONBRIDGE_RATE_LIMIT_MODE === 'production_distributed_required' && !distributedConfig\.configured[\s\S]*ACTIONBRIDGE_DISTRIBUTED_RATE_LIMIT_STORE_REQUIRED[\s\S]*endpointConfigured[\s\S]*tokenConfigured/],
+  ['production mode still rejects missing trusted proxy identity before store use', /ACTIONBRIDGE_RATE_LIMIT_MODE === 'production_distributed_required' && !identity\.trusted[\s\S]*ACTIONBRIDGE_TRUSTED_PROXY_REQUIRED[\s\S]*ACTIONBRIDGE_RATE_LIMIT_MODE === 'production_distributed_required' && !distributedConfig\.configured/],
+]) {
+  if (pattern.test(rateLimitGuardrailSource)) pass(`production rate-limit guardrail: ${label}`);
+  else fail(`production rate-limit guardrail: ${label}`);
+}
+
 process.exitCode = failed ? 1 : 0;

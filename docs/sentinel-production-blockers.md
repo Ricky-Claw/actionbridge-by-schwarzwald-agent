@@ -42,11 +42,14 @@ Required proof:
 - [ ] production KMS/secret-manager resolver with access audit;
 - [x] pilot operator rotation route with rollback and monitoring markers. _Authenticated owner-scoped rotation route authorizes the connector before resolving refs, dry-runs by default, requires env/KMS-style resolver success before update, applies only with an explicit confirmation header, writes redacted control audit for meaningful outcomes, uses a Sentinel policy marker, and supports rollback guidance by rerunning with the previous server-owned ref. Full enforced production workflow remains tied to the unresolved KMS/secret-manager resolver._
 
-## Blocker 5 — Browser/Userflow E2E
+## Gate 5 — Browser/Userflow E2E — Closed for Controlled Pilot
 Build/typecheck/lint metadata has been restored for the focused `src/frontend` snapshot: lockfile/install context exists, `npm run build` executes `next build src/frontend`, `npm run typecheck` executes `tsc --noEmit`, and `npm run lint` executes ESLint with zero warnings.
 
-Remaining required proof:
-- browser/userflow smoke test for setup-link → verification → bridge → capability → approval → connector execution.
+Required proof:
+- [x] browser/userflow smoke test for setup-link → verification → bridge → capability → approval → connector execution. _`npm run test:userflow-smoke` starts the built Next frontend locally and verifies the core ActionBridge route journey, connector-only UX anchors, approval/execution intent copy, and absence of obvious secret-like leakage._
+
+Residual note:
+- This closes the local controlled-pilot gate only; production should still add full browser automation against a deployed staging environment once external infrastructure is approved.
 
 ## Blocker 6 — Operational Retention
 Error logs are bounded and redacted. A resolved-log retention operation now exists on `/api/actionbridge/errors` with dry-run default, explicit destructive confirmation, severity-age cutoffs, and redacted deletion summary audit.

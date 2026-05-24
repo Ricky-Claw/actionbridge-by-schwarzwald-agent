@@ -863,11 +863,24 @@ if (exists('supabase/migrations/20260515234500_actionbridge_webhook_signing_mode
 
 if (exists('docs/specs/actionbridge-webhook-secret-bootstrap-rotation.md')) {
   const secretRotation = read('docs/specs/actionbridge-webhook-secret-bootstrap-rotation.md');
-  for (const token of ['Webhook-v1 Secret Bootstrap + Rotation', 'ACTIONBRIDGE_WEBHOOK_SIGNING_SECRET_', 'Rotation creates a new ref', 'Existing execution and approval records keep their original idempotency digest', 'never raw refs or secrets', 'KMS/secret-manager backed resolver']) {
+  for (const token of ['Webhook-v1 Secret Bootstrap + Rotation', 'ACTIONBRIDGE_WEBHOOK_SIGNING_SECRET_', 'Rotation creates a new ref', 'Existing execution and approval records keep their original idempotency digest', 'never raw refs or secrets', 'KMS/secret-manager backed resolver', '/api/actionbridge/ops/webhook-secret-rotation', 'expectedCurrentDigest', 'X-ActionBridge-Rotation-Confirm']) {
     if (!secretRotation.includes(token)) fail(`webhook secret bootstrap/rotation spec missing ${token}`);
   }
-  if (!process.exitCode) pass('Webhook secret bootstrap/rotation spec defines pilot env flow and production KMS boundary');
+  if (!process.exitCode) pass('Webhook secret bootstrap/rotation spec defines pilot env flow, operator rotation workflow, and production KMS boundary');
 } else fail('Missing Webhook secret bootstrap/rotation spec');
+
+if (exists('src/frontend/app/api/actionbridge/ops/webhook-secret-rotation/route.ts')) {
+  const rotationRoute = read('src/frontend/app/api/actionbridge/ops/webhook-secret-rotation/route.ts');
+  for (const token of ['resolveActionBridgeWebhookSigningSecret', 'x-actionbridge-rotation-confirm', 'apply-webhook-signing-ref', 'expectedCurrentDigest', 'ACTIONBRIDGE_WEBHOOK_ROTATION_CURRENT_DIGEST_MISMATCH', 'webhook_signing_secret.rotated', 'webhook_signing_secret.rotation_denied', 'webhook_signing_secret.rotation_failed', 'webhook_signing_secret.rotation_dry_run', 'sentinel.actionbridge.webhook_signing_secret.rotate.v1', 'rerun_with_previous_server_owned_ref', 'smoke_delivery_required', 'watch_unresolved_ref_and_signature_failure_alerts']) {
+    if (!rotationRoute.includes(token)) fail(`webhook secret rotation route missing ${token}`);
+  }
+  const ownerLookupIndex = rotationRoute.indexOf(".eq('user_id', user!.id)");
+  const resolverIndex = rotationRoute.indexOf('resolveActionBridgeWebhookSigningSecret');
+  if (ownerLookupIndex === -1 || resolverIndex === -1 || ownerLookupIndex > resolverIndex) fail('webhook secret rotation route must authorize connector ownership before resolving secret refs');
+  if (!rotationRoute.includes(".eq('secret_ref', connector.secret_ref)") && !rotationRoute.includes(".is('secret_ref', null)")) fail('webhook secret rotation route must make expectedCurrentDigest stale protection part of the update predicate');
+  if (rotationRoute.includes('secretValue') || rotationRoute.includes('secret_value')) fail('webhook secret rotation route must not accept raw secret values');
+  if (!process.exitCode) pass('Webhook secret rotation route is fail-closed, policy-marked, auditable, and rollback-aware');
+} else fail('Missing webhook secret rotation operator route');
 
 if (exists('README.md')) {
   const readme = read('README.md');

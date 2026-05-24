@@ -40,7 +40,7 @@ Required proof:
 - [x] no raw secret in DB/log/UI/agent route;
 - [x] receiver guide is followed by pilot receiver documentation;
 - [ ] production KMS/secret-manager resolver with access audit;
-- [ ] operator rotation workflow/job with rollback and monitoring.
+- [x] pilot operator rotation route with rollback and monitoring markers. _Authenticated owner-scoped rotation route authorizes the connector before resolving refs, dry-runs by default, requires env/KMS-style resolver success before update, applies only with an explicit confirmation header, writes redacted control audit for meaningful outcomes, uses a Sentinel policy marker, and supports rollback guidance by rerunning with the previous server-owned ref. Full enforced production workflow remains tied to the unresolved KMS/secret-manager resolver._
 
 ## Blocker 5 — Browser/Userflow E2E
 Build/typecheck/lint metadata has been restored for the focused `src/frontend` snapshot: lockfile/install context exists, `npm run build` executes `next build src/frontend`, `npm run typecheck` executes `tsc --noEmit`, and `npm run lint` executes ESLint with zero warnings.

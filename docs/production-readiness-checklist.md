@@ -24,6 +24,7 @@ ActionBridge is suitable for controlled pilot continuation only. This checklist 
 - [x] Pilot rotation story for webhook signing secrets.
 - [ ] Real secret manager/KMS integration for production.
 - [x] Receiver verification guide for `X-ActionBridge-Signature`.
+- [x] Pilot operator rotation route with rollback and monitoring markers. _Authenticated owner-scoped `POST /api/actionbridge/ops/webhook-secret-rotation` authorizes the connector before secret-ref resolution, dry-runs by default, uses Sentinel policy marker `sentinel.actionbridge.webhook_signing_secret.rotate.v1`, requires server-side secret-ref resolution and an explicit confirmation header to apply, conditionally updates only the signing ref/mode with stale-digest protection, writes redacted control audit for meaningful outcomes, and returns smoke/monitoring markers without exposing raw refs or secrets. Full production KMS workflow enforcement remains blocked until real secret-manager integration exists._
 
 ## Gate 3 — Abuse Controls
 - [x] Pilot process-local rate limiter.

@@ -53,11 +53,20 @@ Rotation creates a new ref and new secret instead of mutating the old ref in pla
 Safe rotation sequence:
 1. Create new receiver secret and deploy receiver acceptance for both old and new signatures, or stage receiver to accept the new secret at cutover.
 2. Add server runtime env for the new ref digest.
-3. Update connector atomically to the new `secret_ref` while keeping `webhook_signing_mode = 'hmac_sha256'`.
-4. Send a smoke delivery and confirm the receiver accepts the new signature.
-5. Keep the old secret available for the agreed idempotency/retry window.
-6. Retire the old receiver secret and remove old server env after the window.
-7. Write a redacted audit/operator note containing connector id, old/new `secretRefDigest`, actor, timestamp, and result — never raw refs or secrets.
+3. Dry-run the authenticated operator route `POST /api/actionbridge/ops/webhook-secret-rotation` with `dryRun: true`, `connectorId`, `nextSecretRef`, and optionally `expectedCurrentDigest`.
+4. Apply the atomic connector update only after receiver readiness and env resolution pass: send `dryRun: false` plus `X-ActionBridge-Rotation-Confirm: apply-webhook-signing-ref`. The route updates only `webhook_signing_mode = 'hmac_sha256'` and the server-owned `secret_ref`, then writes a redacted audit event.
+5. Send a smoke delivery and confirm the receiver accepts the new signature.
+6. Keep the old secret available for the agreed idempotency/retry window.
+7. Roll back, if needed, by rerunning the same operator route with the previous server-owned ref after confirming the receiver old secret is available.
+8. Retire the old receiver secret and remove old server env after the window.
+9. Monitor unresolved-ref and signature-failure alerts until the rotation window closes.
+
+Operator route safety controls:
+- Authenticated owner scope; connector must belong to the operator and must be type `webhook`.
+- Default dry-run; state change requires explicit confirmation header.
+- `nextSecretRef` must be a server-owned ref and must resolve through the server-side resolver before any DB update.
+- Optional `expectedCurrentDigest` prevents stale rotation consoles from overwriting a newer ref.
+- Response and audit include only old/new `secretRefDigest`, rollback instruction, and monitoring markers — never raw refs or secrets.
 
 Idempotency/audit rule:
 - Existing execution and approval records keep their original idempotency digest and audit chain.

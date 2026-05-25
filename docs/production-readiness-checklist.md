@@ -31,7 +31,7 @@ ActionBridge is suitable for controlled pilot continuation only. This checklist 
 - [x] Pilot webhook delivery throttle.
 - [x] Pilot webhook failure quarantine signal.
 - [x] Success and denial rate-limit headers for token-adjacent routes.
-- [ ] Distributed atomic rate limiter.
+- [x] Distributed atomic rate limiter. _Production distributed mode now requires trusted proxy identity and a configured Upstash Redis REST provider, increments a Redis counter before allowing requests, fail-closes when the store/config/response is unavailable, and keeps pilot process-local mode unchanged._
 - [x] Trusted proxy/header fail-closed enforcement for production mode.
 - [x] Durable connector pause/quarantine operator API.
 - [x] Durable quarantine behavioral proof for repeated-failure persistence and pre-network delivery block.

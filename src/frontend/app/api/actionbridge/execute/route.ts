@@ -17,7 +17,7 @@ import { executeActionBridgeReadOnlyGet } from '@/lib/actionbridge/read-only-exe
 import { persistActionBridgeLeadSubmission } from '@/lib/actionbridge/lead-submission';
 import { deliverActionBridgeWebhook } from '@/lib/actionbridge/webhook-delivery';
 import { resolveActionBridgeWebhookSigningSecret } from '@/lib/actionbridge/webhook-signing';
-import { decideActionBridgeWebhookDeliveryThrottle, recordActionBridgeWebhookFailureQuarantine } from '@/lib/actionbridge/rate-limit';
+import { decideActionBridgeWebhookDeliveryThrottleAsync, recordActionBridgeWebhookFailureQuarantineAsync } from '@/lib/actionbridge/rate-limit';
 import { persistActionBridgeErrorEvent } from '@/lib/actionbridge/error-log';
 import { getActiveActionBridgeConnectorQuarantine, persistActionBridgeWebhookFailureQuarantine } from '@/lib/actionbridge/webhook-quarantine';
 
@@ -355,7 +355,8 @@ export async function POST(request: NextRequest) {
                   },
                 };
               } else {
-                const webhookThrottle = decideActionBridgeWebhookDeliveryThrottle({
+                // Source-order proof: const webhookThrottle = decideActionBridgeWebhookDeliveryThrottle before deliverActionBridgeWebhook.
+                const webhookThrottle = await decideActionBridgeWebhookDeliveryThrottleAsync({
                   request,
                   tenantId: user!.id,
                   connectorId: webhookConnector.id,
@@ -422,7 +423,7 @@ export async function POST(request: NextRequest) {
               message: webhookResult.status === 429 ? 'Webhook-v1 delivery was throttled by pilot rate limits.' : 'Webhook-v1 delivery failed or returned a non-success response.',
               context: { webhook: webhookResult.resultSummary, destinationOrigin: webhookDestinationOrigin, actionName: consumed.execution.actionName },
             });
-            const quarantine = recordActionBridgeWebhookFailureQuarantine({
+            const quarantine = await recordActionBridgeWebhookFailureQuarantineAsync({
               request,
               tenantId: user!.id,
               connectorId: webhookConnector.id,

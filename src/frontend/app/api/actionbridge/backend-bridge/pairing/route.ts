@@ -13,7 +13,7 @@ import {
   sanitizeActionBridgeBackendBridgePluginInfo,
 } from '@/lib/actionbridge/backend-bridge-pairing';
 import { redactActionBridgeValue } from '@/lib/actionbridge/redaction';
-import { enforceActionBridgeRateLimit } from '@/lib/actionbridge/rate-limit';
+import { enforceActionBridgeRateLimitAsync } from '@/lib/actionbridge/rate-limit';
 
 async function requireActionBridgeUser() {
   const supabase = await createClient();
@@ -83,7 +83,7 @@ export async function PATCH(request: NextRequest) {
   const code = typeof body.code === 'string' ? body.code.trim() : '';
   if (!code) return NextResponse.json({ error: 'INVALID_ACTIONBRIDGE_BACKEND_BRIDGE_PAIRING_EXCHANGE' }, { status: 400 });
 
-  const rateLimit = enforceActionBridgeRateLimit({ request, policyName: 'backendBridgePairing', discriminator: code.slice(0, 16) });
+  const rateLimit = await enforceActionBridgeRateLimitAsync({ request, policyName: 'backendBridgePairing', discriminator: code.slice(0, 16) });
   if (!rateLimit.ok) return rateLimit.response || NextResponse.json({ error: 'ACTIONBRIDGE_RATE_LIMITED' }, { status: 429 });
 
   const serviceSupabase = createCoreServiceClient();

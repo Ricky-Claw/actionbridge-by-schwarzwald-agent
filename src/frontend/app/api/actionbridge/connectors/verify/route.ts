@@ -11,7 +11,7 @@ import {
   type ActionBridgeVerificationMethod,
 } from '@/lib/actionbridge/domain-verification';
 import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
-import { createActionBridgeRateLimitHeaders, enforceActionBridgeRateLimit } from '@/lib/actionbridge/rate-limit';
+import { createActionBridgeRateLimitHeaders, enforceActionBridgeRateLimitAsync } from '@/lib/actionbridge/rate-limit';
 
 const METHODS = new Set<ActionBridgeVerificationMethod>(['well_known', 'meta_tag', 'dns_txt']);
 
@@ -25,7 +25,7 @@ async function requireActionBridgeUser() {
 }
 
 export async function POST(request: NextRequest) {
-  const rateLimit = enforceActionBridgeRateLimit({ request, policyName: 'domainVerification' });
+  const rateLimit = await enforceActionBridgeRateLimitAsync({ request, policyName: 'domainVerification' });
   if (!rateLimit.ok) return rateLimit.response!;
 
   const { supabase, user, response } = await requireActionBridgeUser();
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const rateLimit = enforceActionBridgeRateLimit({ request, policyName: 'domainVerification' });
+  const rateLimit = await enforceActionBridgeRateLimitAsync({ request, policyName: 'domainVerification' });
   if (!rateLimit.ok) return rateLimit.response!;
 
   const { supabase, user, response } = await requireActionBridgeUser();

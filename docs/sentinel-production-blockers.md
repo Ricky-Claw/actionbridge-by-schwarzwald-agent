@@ -10,7 +10,7 @@ Required proof:
 - [x] TTL reset test; _Behavioral module now proves expired windows reset deterministically._
 - [x] trusted proxy absent/missing-header fail-closed proof in production mode;
 - [x] tenant/connector/action/token dimensions documented and used in pilot throttles;
-- [ ] real distributed atomic counter store wired.
+- [x] real distributed atomic counter store wired. _Production distributed mode now uses the async ActionBridge limiter path backed by Upstash Redis REST counters for public/setup/verification/backend-bridge/target routes and webhook delivery/failure throttles; it fails closed for missing trusted proxy identity, missing store config, HTTP failures, or invalid Redis responses without exposing raw IPs or tokens._
 
 ## Blocker 2 — Durable Quarantine / Pause
 Initial durable connector quarantine primitive exists: `actionbridge_connector_quarantine`, `webhook-quarantine.ts`, and execute-route pre-delivery blocking for active webhook quarantine.

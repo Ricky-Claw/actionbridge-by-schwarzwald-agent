@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createCoreServiceClient } from '@/lib/core/service-client';
 import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
 import { redactActionBridgeValue } from '@/lib/actionbridge/redaction';
-import { enforceActionBridgeRateLimit } from '@/lib/actionbridge/rate-limit';
+import { enforceActionBridgeRateLimitAsync } from '@/lib/actionbridge/rate-limit';
 import {
   digestActionBridgeBackendBridgeHealthNonce,
   sanitizeActionBridgeBackendBridgeHealth,
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'INVALID_ACTIONBRIDGE_BACKEND_BRIDGE_HEALTH' }, { status: 400 });
   }
 
-  const rateLimit = enforceActionBridgeRateLimit({ request, policyName: 'backendBridgePairing', discriminator: `${connectorId}:${nonce.slice(0, 16)}` });
+  const rateLimit = await enforceActionBridgeRateLimitAsync({ request, policyName: 'backendBridgePairing', discriminator: `${connectorId}:${nonce.slice(0, 16)}` });
   if (!rateLimit.ok) return rateLimit.response || NextResponse.json({ error: 'ACTIONBRIDGE_RATE_LIMITED' }, { status: 429 });
 
   const serviceSupabase = createCoreServiceClient();

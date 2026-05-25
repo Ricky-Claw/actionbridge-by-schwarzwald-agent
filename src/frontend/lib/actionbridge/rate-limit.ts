@@ -28,6 +28,11 @@ export interface ActionBridgeDistributedRateLimitConfig {
   tokenConfigured: boolean;
 }
 
+interface DistributedCounterResult {
+  count: number;
+  resetAtMs: number;
+}
+
 const DEFAULT_POLICIES: Record<string, ActionBridgeRateLimitPolicy> = {
   setupSession: { name: 'setupSession', windowMs: 60_000, max: 30, scope: 'pilot_process_local' },
   bridgeHandshake: { name: 'bridgeHandshake', windowMs: 60_000, max: 20, scope: 'pilot_process_local' },
@@ -104,6 +109,72 @@ function cleanupExpiredPilotBuckets(nowMs: number) {
     if (bucket.resetAtMs <= nowMs) buckets.delete(key);
     if (buckets.size < MAX_PILOT_BUCKETS) return;
   }
+}
+
+async function incrementUpstashRedisRestCounter(input: {
+  key: string;
+  windowMs: number;
+  nowMs: number;
+}): Promise<DistributedCounterResult> {
+  const baseUrl = process.env.ACTIONBRIDGE_UPSTASH_REDIS_REST_URL;
+  const token = process.env.ACTIONBRIDGE_UPSTASH_REDIS_REST_TOKEN;
+  if (!baseUrl || !token) throw new Error('ACTIONBRIDGE_DISTRIBUTED_RATE_LIMIT_STORE_NOT_CONFIGURED');
+
+  const resetAtMs = input.nowMs + input.windowMs;
+  const redisKey = `actionbridge:rate-limit:${input.key}`;
+  const response = await fetch(`${baseUrl.replace(/\/$/, '')}/pipeline`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify([
+      ['INCR', redisKey],
+      ['PEXPIRE', redisKey, String(input.windowMs)],
+    ]),
+    cache: 'no-store',
+  });
+
+  if (!response.ok) throw new Error(`ACTIONBRIDGE_DISTRIBUTED_RATE_LIMIT_STORE_HTTP_${response.status}`);
+  const results = await response.json();
+  const count = Number(Array.isArray(results) ? results[0]?.result : NaN);
+  const expireApplied = Number(Array.isArray(results) ? results[1]?.result : 0);
+  if (!Number.isFinite(count) || count < 1 || expireApplied !== 1) {
+    throw new Error('ACTIONBRIDGE_DISTRIBUTED_RATE_LIMIT_STORE_INVALID_RESPONSE');
+  }
+  return { count, resetAtMs };
+}
+
+function createRateLimitUnavailableResponse(input: {
+  policyName: string;
+  keyDigest: string;
+  resetAt: string;
+  error: string;
+  detail?: Record<string, unknown>;
+}): ActionBridgeRateLimitResult {
+  return {
+    ok: false,
+    keyDigest: input.keyDigest,
+    remaining: 0,
+    resetAt: input.resetAt,
+    retryAfterSeconds: 60,
+    response: NextResponse.json({
+      error: input.error,
+      rateLimit: {
+        policy: input.policyName,
+        keyDigest: input.keyDigest,
+        retryAfterSeconds: 60,
+        resetAt: input.resetAt,
+        ...input.detail,
+      },
+    }, {
+      status: 503,
+      headers: {
+        'Retry-After': '60',
+        ...createActionBridgeRateLimitHeaders({ policyName: input.policyName, remaining: 0, resetAt: input.resetAt }),
+      },
+    }),
+  };
 }
 
 export function createActionBridgeRateLimitHeaders(result: Pick<ActionBridgeRateLimitResult, 'remaining' | 'resetAt'> & { policyName: string }): Record<string, string> {
@@ -221,12 +292,104 @@ export function decideActionBridgeRateLimit(input: {
   };
 }
 
+export async function decideActionBridgeRateLimitAsync(input: {
+  request: NextRequest;
+  policy: ActionBridgeRateLimitPolicy;
+  discriminator?: string;
+  nowMs?: number;
+}): Promise<ActionBridgeRateLimitResult> {
+  const nowMs = input.nowMs ?? Date.now();
+  const identity = getActionBridgeTrustedClientIdentity(input.request);
+  const distributedConfig = getActionBridgeDistributedRateLimitConfig();
+  const rawKey = `${input.policy.name}|${clientKey(input.request)}|${input.discriminator || ''}`;
+  const keyDigest = digestKey(rawKey);
+  const resetAt = new Date(nowMs + input.policy.windowMs).toISOString();
+
+  if (ACTIONBRIDGE_RATE_LIMIT_MODE !== 'production_distributed_required') {
+    return decideActionBridgeRateLimit(input);
+  }
+
+  if (!identity.trusted) {
+    return createRateLimitUnavailableResponse({
+      policyName: input.policy.name,
+      keyDigest,
+      resetAt,
+      error: 'ACTIONBRIDGE_TRUSTED_PROXY_REQUIRED',
+      detail: { trustedProxyHeader: ACTIONBRIDGE_TRUSTED_PROXY_HEADER },
+    });
+  }
+
+  if (!distributedConfig.configured) {
+    return createRateLimitUnavailableResponse({
+      policyName: input.policy.name,
+      keyDigest,
+      resetAt,
+      error: 'ACTIONBRIDGE_DISTRIBUTED_RATE_LIMIT_STORE_REQUIRED',
+      detail: {
+        provider: distributedConfig.provider,
+        endpointConfigured: distributedConfig.endpointConfigured,
+        tokenConfigured: distributedConfig.tokenConfigured,
+      },
+    });
+  }
+
+  let counter: DistributedCounterResult;
+  try {
+    counter = await incrementUpstashRedisRestCounter({ key: `${input.policy.name}:${keyDigest}`, windowMs: input.policy.windowMs, nowMs });
+  } catch {
+    return createRateLimitUnavailableResponse({
+      policyName: input.policy.name,
+      keyDigest,
+      resetAt,
+      error: 'ACTIONBRIDGE_DISTRIBUTED_RATE_LIMIT_STORE_UNAVAILABLE',
+      detail: { provider: distributedConfig.provider },
+    });
+  }
+
+  const distributedResetAt = new Date(counter.resetAtMs).toISOString();
+  const remaining = Math.max(0, input.policy.max - counter.count);
+  if (counter.count <= input.policy.max) {
+    return { ok: true, keyDigest, remaining, resetAt: distributedResetAt };
+  }
+
+  const retryAfterSeconds = Math.max(1, Math.ceil((counter.resetAtMs - nowMs) / 1000));
+  return {
+    ok: false,
+    keyDigest,
+    remaining: 0,
+    resetAt: distributedResetAt,
+    retryAfterSeconds,
+    response: NextResponse.json({
+      error: 'ACTIONBRIDGE_RATE_LIMITED',
+      rateLimit: { policy: input.policy.name, keyDigest, retryAfterSeconds, resetAt: distributedResetAt },
+    }, {
+      status: 429,
+      headers: {
+        'Retry-After': String(retryAfterSeconds),
+        ...createActionBridgeRateLimitHeaders({ policyName: input.policy.name, remaining: 0, resetAt: distributedResetAt }),
+      },
+    }),
+  };
+}
+
 export function enforceActionBridgeRateLimit(input: {
   request: NextRequest;
   policyName: keyof typeof DEFAULT_POLICIES;
   discriminator?: string;
 }): ActionBridgeRateLimitResult {
   return decideActionBridgeRateLimit({
+    request: input.request,
+    policy: DEFAULT_POLICIES[input.policyName],
+    discriminator: input.discriminator,
+  });
+}
+
+export async function enforceActionBridgeRateLimitAsync(input: {
+  request: NextRequest;
+  policyName: keyof typeof DEFAULT_POLICIES;
+  discriminator?: string;
+}): Promise<ActionBridgeRateLimitResult> {
+  return decideActionBridgeRateLimitAsync({
     request: input.request,
     policy: DEFAULT_POLICIES[input.policyName],
     discriminator: input.discriminator,
@@ -247,6 +410,20 @@ export function decideActionBridgeWebhookDeliveryThrottle(input: {
   });
 }
 
+export async function decideActionBridgeWebhookDeliveryThrottleAsync(input: {
+  request: NextRequest;
+  tenantId: string;
+  connectorId: string;
+  actionName: string;
+  destinationOrigin: string;
+}): Promise<ActionBridgeRateLimitResult> {
+  return enforceActionBridgeRateLimitAsync({
+    request: input.request,
+    policyName: 'webhookDelivery',
+    discriminator: `${input.tenantId}|${input.connectorId}|${input.actionName}|${input.destinationOrigin}`,
+  });
+}
+
 export function recordActionBridgeWebhookFailureQuarantine(input: {
   request: NextRequest;
   tenantId: string;
@@ -255,6 +432,20 @@ export function recordActionBridgeWebhookFailureQuarantine(input: {
   destinationOrigin: string;
 }): ActionBridgeRateLimitResult {
   return enforceActionBridgeRateLimit({
+    request: input.request,
+    policyName: 'webhookFailureQuarantine',
+    discriminator: `${input.tenantId}|${input.connectorId}|${input.actionName}|${input.destinationOrigin}`,
+  });
+}
+
+export async function recordActionBridgeWebhookFailureQuarantineAsync(input: {
+  request: NextRequest;
+  tenantId: string;
+  connectorId: string;
+  actionName: string;
+  destinationOrigin: string;
+}): Promise<ActionBridgeRateLimitResult> {
+  return enforceActionBridgeRateLimitAsync({
     request: input.request,
     policyName: 'webhookFailureQuarantine',
     discriminator: `${input.tenantId}|${input.connectorId}|${input.actionName}|${input.destinationOrigin}`,

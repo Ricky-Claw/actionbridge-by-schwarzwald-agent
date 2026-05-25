@@ -13,7 +13,7 @@ import {
   normalizeActionBridgeTargetUrl,
 } from '@/lib/actionbridge/multi-target-registry';
 import type { ActionBridgeTarget } from '@/lib/actionbridge/types';
-import { createActionBridgeRateLimitHeaders, enforceActionBridgeRateLimit } from '@/lib/actionbridge/rate-limit';
+import { createActionBridgeRateLimitHeaders, enforceActionBridgeRateLimitAsync } from '@/lib/actionbridge/rate-limit';
 import { decideActionBridgeDnsPinning } from '@/lib/actionbridge/dns-ip-guard';
 
 const MAX_LIVE_CHECK_BYTES = 250_000;
@@ -228,7 +228,7 @@ export async function GET(request: NextRequest) {
   const providerId = ACTIONBRIDGE_DEFAULT_PROVIDER_ID;
   const membership = await requireTenantMembership(supabase as any, { providerId, tenantId, userId: user!.id });
   if (!membership.ok) return membership.response!;
-  const rateLimit = enforceActionBridgeRateLimit({ request, policyName: 'domainVerification', discriminator: `${providerId}|${tenantId}|targets:list` });
+  const rateLimit = await enforceActionBridgeRateLimitAsync({ request, policyName: 'domainVerification', discriminator: `${providerId}|${tenantId}|targets:list` });
   if (!rateLimit.ok) return rateLimit.response!;
 
   const { targets, error } = await listTargets(supabase as any, { providerId, tenantId });
@@ -256,7 +256,7 @@ export async function POST(request: NextRequest) {
   const providerId = ACTIONBRIDGE_DEFAULT_PROVIDER_ID;
   const membership = await requireTenantMembership(supabase as any, { providerId, tenantId, userId: user!.id, write: true, bootstrapIfEmpty: true });
   if (!membership.ok) return membership.response!;
-  const rateLimit = enforceActionBridgeRateLimit({ request, policyName: 'domainVerification', discriminator: `${providerId}|${tenantId}|targets:intake` });
+  const rateLimit = await enforceActionBridgeRateLimitAsync({ request, policyName: 'domainVerification', discriminator: `${providerId}|${tenantId}|targets:intake` });
   if (!rateLimit.ok) return rateLimit.response!;
 
   const intake = createActionBridgeTargetsFromUrls({ scope: { providerId, tenantId, ownerUserId: user!.id, bridgeOrigin: ACTIONBRIDGE_DEFAULT_BRIDGE_ORIGIN }, urls: body.urls });
@@ -283,7 +283,7 @@ export async function PUT(request: NextRequest) {
   const providerId = ACTIONBRIDGE_DEFAULT_PROVIDER_ID;
   const membership = await requireTenantMembership(supabase as any, { providerId, tenantId, userId: user!.id, write: true });
   if (!membership.ok) return membership.response!;
-  const rateLimit = enforceActionBridgeRateLimit({ request, policyName: 'domainVerification', discriminator: `${providerId}|${tenantId}|targets:live-check` });
+  const rateLimit = await enforceActionBridgeRateLimitAsync({ request, policyName: 'domainVerification', discriminator: `${providerId}|${tenantId}|targets:live-check` });
   if (!rateLimit.ok) return rateLimit.response!;
 
   const { data: row, error: readError } = await (supabase as any)

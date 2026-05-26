@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createCoreServiceClient } from '@/lib/core/service-client';
 import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
 import { redactActionBridgeValue } from '@/lib/actionbridge/redaction';
-import { resolveActionBridgeWebhookSigningSecret } from '@/lib/actionbridge/webhook-signing';
+import { resolveActionBridgeWebhookSigningSecretAsync as resolveActionBridgeWebhookSigningSecret } from '@/lib/actionbridge/webhook-signing';
 
 const SECRET_REF_PATTERN = /^actionbridge:webhook-signing:[a-zA-Z0-9._:-]{8,160}$/;
 const ROTATION_POLICY = 'sentinel.actionbridge.webhook_signing_secret.rotate.v1';
@@ -21,6 +21,17 @@ function normalizeSecretRef(value: unknown): string | null {
   const candidate = value.trim();
   if (!SECRET_REF_PATTERN.test(candidate)) return null;
   return candidate;
+}
+
+function parseExpectedCurrentDigest(bodyObject: Record<string, unknown>): { digest: string | null; invalid: boolean } {
+  const raw = typeof bodyObject.expectedCurrentDigest === 'string'
+    ? bodyObject.expectedCurrentDigest.trim().toLowerCase()
+    : typeof bodyObject.expected_current_digest === 'string'
+      ? bodyObject.expected_current_digest.trim().toLowerCase()
+      : '';
+  if (!raw) return { digest: null, invalid: false };
+  if (!/^sha256:[a-f0-9]{16}$/.test(raw)) return { digest: null, invalid: true };
+  return { digest: raw, invalid: false };
 }
 
 async function requireActionBridgeUser() {
@@ -77,11 +88,8 @@ export async function POST(request: NextRequest) {
       ? bodyObject.connector_id.trim()
       : '';
   const nextSecretRef = normalizeSecretRef(bodyObject.nextSecretRef ?? bodyObject.next_secret_ref);
-  const expectedCurrentDigest = typeof bodyObject.expectedCurrentDigest === 'string'
-    ? bodyObject.expectedCurrentDigest.trim().toLowerCase()
-    : typeof bodyObject.expected_current_digest === 'string'
-      ? bodyObject.expected_current_digest.trim().toLowerCase()
-      : null;
+  const expectedDigestInput = parseExpectedCurrentDigest(bodyObject);
+  const expectedCurrentDigest = expectedDigestInput.digest;
   const dryRun = bodyObject.dryRun !== false && bodyObject.dry_run !== false;
   const applyConfirmed = request.headers.get('x-actionbridge-rotation-confirm') === 'apply-webhook-signing-ref';
   const { serviceSupabase, error: serviceClientError } = tryCreateServiceClient();
@@ -94,16 +102,20 @@ export async function POST(request: NextRequest) {
     sentinelPolicy: ROTATION_POLICY,
   };
 
-  if (!connectorId || !nextSecretRef) {
+  if (!connectorId || !nextSecretRef || expectedDigestInput.invalid) {
     await auditRotationAttempt(serviceSupabase, {
       userId: user!.id,
       connectorId: connectorId || null,
       eventName: 'webhook_signing_secret.rotation_denied',
       status: 'denied',
-      requestInput: redactedRequestInput,
-      resultSummary: { error: 'INVALID_ACTIONBRIDGE_WEBHOOK_SECRET_ROTATION', serviceAuditAvailable: Boolean(serviceSupabase) },
+      requestInput: { ...redactedRequestInput, expectedCurrentDigest: null, expectedCurrentDigestInvalid: expectedDigestInput.invalid },
+      resultSummary: { error: 'INVALID_ACTIONBRIDGE_WEBHOOK_SECRET_ROTATION', expectedCurrentDigestInvalid: expectedDigestInput.invalid, serviceAuditAvailable: Boolean(serviceSupabase) },
     });
-    return NextResponse.json({ error: 'INVALID_ACTIONBRIDGE_WEBHOOK_SECRET_ROTATION', redactedInput: redactActionBridgeValue(bodyObject) }, { status: 400 });
+    return NextResponse.json({
+      error: 'INVALID_ACTIONBRIDGE_WEBHOOK_SECRET_ROTATION',
+      expectedCurrentDigestInvalid: expectedDigestInput.invalid || undefined,
+      redactedInput: redactActionBridgeValue({ ...bodyObject, expectedCurrentDigest: undefined, expected_current_digest: undefined }),
+    }, { status: 400 });
   }
 
   const { data: connector } = await (supabase as any)
@@ -145,7 +157,7 @@ export async function POST(request: NextRequest) {
     }, { status: 409 });
   }
 
-  const signingResolution = resolveActionBridgeWebhookSigningSecret({
+  const signingResolution = await resolveActionBridgeWebhookSigningSecret({
     connectorId,
     signingMode: 'hmac_sha256',
     secretRef: nextSecretRef,

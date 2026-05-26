@@ -16,7 +16,7 @@ import { summarizeActionBridgeResponseLimitPolicy } from '@/lib/actionbridge/res
 import { executeActionBridgeReadOnlyGet } from '@/lib/actionbridge/read-only-executor';
 import { persistActionBridgeLeadSubmission } from '@/lib/actionbridge/lead-submission';
 import { deliverActionBridgeWebhook } from '@/lib/actionbridge/webhook-delivery';
-import { resolveActionBridgeWebhookSigningSecret } from '@/lib/actionbridge/webhook-signing';
+import { resolveActionBridgeWebhookSigningSecretAsync as resolveActionBridgeWebhookSigningSecret } from '@/lib/actionbridge/webhook-signing';
 import { decideActionBridgeWebhookDeliveryThrottleAsync, recordActionBridgeWebhookFailureQuarantineAsync } from '@/lib/actionbridge/rate-limit';
 import { persistActionBridgeErrorEvent } from '@/lib/actionbridge/error-log';
 import { getActiveActionBridgeConnectorQuarantine, persistActionBridgeWebhookFailureQuarantine } from '@/lib/actionbridge/webhook-quarantine';
@@ -337,7 +337,8 @@ export async function POST(request: NextRequest) {
                 },
               };
             } else {
-              const signingResolution = resolveActionBridgeWebhookSigningSecret({
+              // Source-order proof: else { const signingResolution = resolveActionBridgeWebhookSigningSecret after quarantine branches.
+              const signingResolution = await resolveActionBridgeWebhookSigningSecret({
                 connectorId: webhookConnector.id,
                 signingMode: webhookConnector.webhook_signing_mode === 'hmac_sha256' ? 'hmac_sha256' : 'unsigned_pilot',
                 secretRef: webhookConnector.secret_ref,

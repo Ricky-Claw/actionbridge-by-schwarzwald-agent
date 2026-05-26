@@ -1,7 +1,7 @@
 # ActionBridge Webhook-v1 Secret Bootstrap + Rotation
 
 ## Status
-Controlled pilot specification. This is not full production secret management; production still requires a managed secret store/KMS, access audit, rotation automation, and operator UI controls.
+Controlled pilot + production secret-resolver specification. Production webhook signing now has a managed Google Secret Manager REST resolver path with fail-closed behavior and redacted access-audit summaries; production still needs environment provisioning, rotation automation beyond the operator route, and operator UI controls before broad rollout.
 
 ## Goals
 - Enable HMAC-signed Webhook-v1 pilot connectors without raw secrets entering ActionBridge DB, logs, UI, setup links, tool catalog, or agent routes.
@@ -79,11 +79,26 @@ Idempotency/audit rule:
 - env secret absent or outside 32..4096 bytes: block before network.
 - unresolved/malformed refs must produce redacted summaries only: `secret_ref_missing` or `secret_ref_unresolved` with optional `secretRefDigest`.
 
-## Production Upgrade Requirements
-Before broad rollout, replace the env shim with managed secret storage:
-- KMS/secret-manager backed resolver;
-- scoped service identity and least privilege;
-- secret access audit metadata;
+## Production Managed Secret Resolver
+Set production secret resolution to managed mode. This is the KMS/secret-manager backed resolver path for webhook signing:
+
+```text
+ACTIONBRIDGE_SECRET_MANAGER_PROVIDER=google_secret_manager_rest
+ACTIONBRIDGE_SECRET_MANAGER_REQUIRED=true
+ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_PROJECT_ID=<project>
+ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_ACCESS_TOKEN=<scoped runtime token>
+```
+
+Behavior:
+- `actionbridge:webhook-signing:<label>` maps to a provider-safe Google Secret Manager secret id using a digest-only deterministic form: `actionbridge-webhook-signing-<sha256-ref-prefix>`. Raw labels are never sent as secret IDs.
+- The resolver reads `versions/latest:access` with a 3s timeout and fails closed for missing config, denied access, invalid payload, or provider errors.
+- Result summaries include only `provider`, `accessAudit`, `secretRefDigest`, optional `versionResourceDigest`, and never raw refs, raw tokens, env names, or secret values.
+- Pilot env lookup is disabled when managed secrets are required, including production mode.
+
+Remaining production hardening before broad rollout:
+- scoped service identity and least privilege token issuance;
+- managed environment provisioning;
+- operator UI controls for managed-secret rotation;
 - rotation job or operator workflow with rollback;
 - dual-secret grace window support if automatic retries are introduced;
 - monitoring for unresolved refs and signature failures;

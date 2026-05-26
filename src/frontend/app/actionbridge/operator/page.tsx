@@ -1,5 +1,7 @@
 export const dynamic = 'force-dynamic';
 
+import ActionBridgeWebhookSecretRotationClient from './ActionBridgeWebhookSecretRotationClient';
+
 export default function ActionBridgeOperatorPage() {
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-10 text-slate-100">
@@ -35,6 +37,8 @@ export default function ActionBridgeOperatorPage() {
             Production integration should call the API client-side/server-action style and show the raw setup token once.
           </p>
         </section>
+
+        <ActionBridgeWebhookSecretRotationClient />
 
         <section className="grid gap-5 md:grid-cols-2">
           <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5">

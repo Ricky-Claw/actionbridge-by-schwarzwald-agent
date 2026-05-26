@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 
+import crypto from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { redactActionBridgeValue } from '@/lib/actionbridge/redaction';
@@ -123,6 +124,11 @@ function parseActionBridgeConnectorDraft(body: Record<string, unknown>) {
   };
 }
 
+function digestSecretRef(secretRef: unknown): string | null {
+  if (typeof secretRef !== 'string' || !secretRef) return null;
+  return `sha256:${crypto.createHash('sha256').update(secretRef).digest('hex').slice(0, 16)}`;
+}
+
 function serializeActionBridgeConnector(connector: any) {
   const whatsapp = connector.type === 'whatsapp_business'
     ? summarizeActionBridgeWhatsAppCapabilities(connector.capabilities || [])
@@ -142,6 +148,7 @@ function serializeActionBridgeConnector(connector: any) {
     permissionStatus: connector.permission_status,
     endpointPath: connector.endpoint_path || '/',
     webhookSigningMode: connector.webhook_signing_mode || 'unsigned_pilot',
+    webhookSecretRefDigest: connector.type === 'webhook' ? digestSecretRef(connector.secret_ref) : null,
     backendBridge: connector.type === 'backend_bridge' ? createActionBridgeBackendBridgeSetupContract({
       connectorId: connector.id,
       installMode: normalizeActionBridgeBackendBridgeInstallMode((connector.capabilities || [])
@@ -168,7 +175,7 @@ export async function GET() {
 
   const { data, error } = await (supabase as any)
     .from('actionbridge_connectors')
-    .select('id, user_id, name, type, base_url, auth_mode, enabled, allowed_origins, capabilities, network_execution_enabled, safety_status, permission_status, endpoint_path, webhook_signing_mode, created_at, updated_at')
+    .select('id, user_id, name, type, base_url, auth_mode, enabled, allowed_origins, capabilities, network_execution_enabled, safety_status, permission_status, endpoint_path, webhook_signing_mode, secret_ref, created_at, updated_at')
     .eq('user_id', user!.id)
     .order('created_at', { ascending: false })
     .limit(100);

@@ -11,6 +11,8 @@ type ConnectorView = {
   networkExecutionEnabled: boolean;
   safetyStatus: 'untested' | 'pass' | 'fail' | string;
   permissionStatus: 'draft' | 'active' | 'paused' | 'revoked' | string;
+  webhookSigningMode?: string;
+  webhookSecretRefDigest?: string | null;
   embeddedSetup?: { status?: string; customerLabel?: string; operatorLabel?: string };
   backendBridge?: { installMode?: string; requiredControls?: string[] };
   updatedAt?: string;
@@ -48,6 +50,7 @@ export default function ActionBridgeConnectorsClient() {
   const [connectors, setConnectors] = useState<ConnectorView[]>([]);
   const [status, setStatus] = useState('Connector Status noch nicht geladen.');
   const [busy, setBusy] = useState(false);
+  const [rotationDrafts, setRotationDrafts] = useState<Record<string, { nextSecretRef: string; apply: boolean }>>({});
 
   const summary = useMemo(() => {
     const backendConnected = connectors.filter((connector) => connector.type === 'backend_bridge' && connector.safetyStatus === 'pass').length;
@@ -78,6 +81,51 @@ export default function ActionBridgeConnectorsClient() {
   }
 
   useEffect(() => { void loadConnectors(); }, []);
+
+  function updateRotationDraft(connectorId: string, patch: Partial<{ nextSecretRef: string; apply: boolean }>) {
+    setRotationDrafts((current) => {
+      const existing = current[connectorId];
+      return {
+        ...current,
+        [connectorId]: {
+          nextSecretRef: patch.nextSecretRef ?? existing?.nextSecretRef ?? '',
+          apply: patch.apply ?? existing?.apply ?? false,
+        },
+      };
+    });
+  }
+
+  async function rotateWebhookSecret(connector: ConnectorView) {
+    const draft = rotationDrafts[connector.id] || { nextSecretRef: '', apply: false };
+    setBusy(true);
+    setStatus(draft.apply ? 'Webhook Signing Ref wird nach Dry-Run-Gate rotiert …' : 'Webhook Signing Ref Dry-Run läuft …');
+    try {
+      const response = await fetch('/api/actionbridge/ops/webhook-secret-rotation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(draft.apply ? { 'x-actionbridge-rotation-confirm': 'apply-webhook-signing-ref' } : {}),
+        },
+        body: JSON.stringify({
+          connectorId: connector.id,
+          nextSecretRef: draft.nextSecretRef,
+          expectedCurrentDigest: connector.webhookSecretRefDigest || undefined,
+          dryRun: !draft.apply,
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setStatus(typeof body.error === 'string' ? body.error : 'ACTIONBRIDGE_WEBHOOK_ROTATION_FAILED');
+        return;
+      }
+      setStatus(draft.apply ? 'Webhook Signing Ref rotiert. Smoke Delivery + Alerts prüfen.' : 'Dry-Run OK. Nur mit bewusster Apply-Bestätigung rotieren.');
+      if (draft.apply) await loadConnectors();
+    } catch {
+      setStatus('Webhook Signing Rotation konnte nicht ausgeführt werden.');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <main className="min-h-screen bg-[#080f0b] px-6 py-10 text-stone-100">
@@ -139,6 +187,41 @@ export default function ActionBridgeConnectorsClient() {
                 {connector.type === 'backend_bridge' && (
                   <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3 text-xs leading-5 text-amber-100">
                     WordPress/SDK Flow: Connector anlegen → Pairing-Code im Plugin einfügen → Signed Health bestätigt Verbindung → Permissions später bewusst aktivieren.
+                  </div>
+                )}
+
+                {connector.type === 'webhook' && (
+                  <div className="mt-4 rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-xs leading-5 text-cyan-50">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="font-bold">Webhook Signing: {connector.webhookSigningMode || 'unsigned_pilot'}</p>
+                      <p className="text-cyan-200">Current ref digest: {connector.webhookSecretRefDigest || 'none'}</p>
+                    </div>
+                    <label className="mt-3 block text-cyan-100">
+                      Neuer server-owned Secret Ref
+                      <input
+                        value={rotationDrafts[connector.id]?.nextSecretRef || ''}
+                        onChange={(event) => updateRotationDraft(connector.id, { nextSecretRef: event.target.value })}
+                        placeholder="actionbridge:webhook-signing:customer-ref-v2"
+                        className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-stone-100 outline-none placeholder:text-stone-600"
+                      />
+                    </label>
+                    <label className="mt-2 flex items-center gap-2 text-cyan-100">
+                      <input
+                        type="checkbox"
+                        checked={rotationDrafts[connector.id]?.apply === true}
+                        onChange={(event) => updateRotationDraft(connector.id, { apply: event.target.checked })}
+                      />
+                      Apply nach Resolver-Check ausführen (sonst nur Dry-Run)
+                    </label>
+                    <button
+                      type="button"
+                      disabled={busy || !(rotationDrafts[connector.id]?.nextSecretRef || '').trim()}
+                      onClick={() => rotateWebhookSecret(connector)}
+                      className="mt-3 rounded-xl border border-cyan-200/30 px-3 py-2 font-black text-cyan-50 disabled:opacity-50"
+                    >
+                      Signing Ref prüfen/rotieren
+                    </button>
+                    <p className="mt-2 text-cyan-200">UI sendet nie Roh-Secrets, nur server-owned Refs; Route auditiert redacted und blockt ohne Resolver-Erfolg.</p>
                   </div>
                 )}
 

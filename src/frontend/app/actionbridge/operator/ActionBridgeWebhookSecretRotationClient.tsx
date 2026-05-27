@@ -30,9 +30,12 @@ export default function ActionBridgeWebhookSecretRotationClient() {
   const [connectorId, setConnectorId] = useState('');
   const [nextSecretRef, setNextSecretRef] = useState('');
   const [expectedCurrentDigest, setExpectedCurrentDigest] = useState('');
+  const [receiverSmokeEvidence, setReceiverSmokeEvidence] = useState('');
   const [result, setResult] = useState<RotationResult | null>(null);
   const [status, setStatus] = useState('Loading webhook connectors…');
   const [busy, setBusy] = useState(false);
+
+  const receiverSmokeEvidenceReady = receiverSmokeEvidence.trim().length >= 12;
 
   const selectedConnector = useMemo(
     () => connectors.find((connector) => connector.id === connectorId) || null,
@@ -138,13 +141,23 @@ export default function ActionBridgeWebhookSecretRotationClient() {
         </div>
       )}
 
+      <label className="mt-5 block space-y-2">
+        <span className="text-sm font-semibold text-slate-200">Receiver smoke-test evidence required before apply</span>
+        <textarea
+          value={receiverSmokeEvidence}
+          onChange={(event) => setReceiverSmokeEvidence(event.target.value)}
+          placeholder="Example: receiver accepted test delivery at 2026-05-27T01:18Z; signature digest matched; monitoring marker reviewed. Do not paste secrets."
+          className="min-h-24 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100"
+        />
+      </label>
+
       <div className="mt-5 flex flex-wrap gap-2">
         <button disabled={busy || !connectorId || !nextSecretRef} onClick={() => rotate(true)} className="rounded-xl bg-cyan-200 px-4 py-2 text-sm font-bold text-slate-950 disabled:opacity-60">Dry-run rotation</button>
-        <button disabled={busy || !connectorId || !nextSecretRef} onClick={() => rotate(false)} className="rounded-xl bg-red-300 px-4 py-2 text-sm font-bold text-slate-950 disabled:opacity-60">Apply after receiver smoke</button>
+        <button disabled={busy || !connectorId || !nextSecretRef || !receiverSmokeEvidenceReady} onClick={() => rotate(false)} className="rounded-xl bg-red-300 px-4 py-2 text-sm font-bold text-slate-950 disabled:opacity-60">Apply after recorded receiver smoke</button>
       </div>
 
       <p className="mt-4 text-xs leading-5 text-amber-100">
-        Production rule: apply only after the receiver accepts the new secret and after dry-run returns monitoring markers. Rollback is rerun with the previous server-owned ref.
+        Production rule: apply only after the receiver accepts the new secret, after dry-run returns monitoring markers, and after evidence is recorded locally in this operator checkpoint. Rollback is rerun with the previous server-owned ref.
       </p>
 
       {result && (

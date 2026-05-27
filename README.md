@@ -78,4 +78,4 @@ Production blockers are tracked in:
 
 ## Status
 
-Focused ActionBridge repository snapshot. Build/typecheck/lint metadata is still incomplete in this snapshot; this is documented as a production blocker.
+Focused ActionBridge repository snapshot. Build/typecheck/lint metadata has been restored for the focused `src/frontend` snapshot and is covered by the green pilot gates above. Broad production rollout remains blocked until the managed secret-manager/KMS environment is provisioned with least-privilege service identity/token issuance and Sentinel release review.

@@ -46,6 +46,27 @@ function createGoogleSecretManagerSecretId(secretRef) {
   return `actionbridge-webhook-signing-${crypto.createHash('sha256').update(secretRef).digest('hex').slice(0, 32)}`;
 }
 
+function checkSecretManagerProductionReadiness(env = {}) {
+  const provider = env.ACTIONBRIDGE_SECRET_MANAGER_PROVIDER === 'google_secret_manager_rest' ? 'google_secret_manager_rest' : 'pilot_env';
+  const missing = [];
+  if (provider !== 'google_secret_manager_rest') missing.push('ACTIONBRIDGE_SECRET_MANAGER_PROVIDER=google_secret_manager_rest');
+  if (env.ACTIONBRIDGE_SECRET_MANAGER_REQUIRED !== 'true') missing.push('ACTIONBRIDGE_SECRET_MANAGER_REQUIRED=true');
+  if (!env.ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_PROJECT_ID) missing.push('ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_PROJECT_ID');
+  if (!env.ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_ACCESS_TOKEN) missing.push('ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_ACCESS_TOKEN');
+  return {
+    ok: missing.length === 0,
+    provider,
+    missing,
+    resultSummary: {
+      provider,
+      readiness: missing.length === 0 ? 'managed_secret_environment_shape_configured' : 'managed_secret_environment_incomplete',
+      missing,
+      projectConfigured: Boolean(env.ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_PROJECT_ID),
+      accessTokenConfigured: Boolean(env.ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_ACCESS_TOKEN),
+    },
+  };
+}
+
 function resolveActionBridgeWebhookSigningSecret(input) {
   const env = input.env || {};
   if (env.ACTIONBRIDGE_SECRET_MANAGER_PROVIDER === 'google_secret_manager_rest') {
@@ -133,6 +154,18 @@ if (/^actionbridge-webhook-signing-[a-f0-9]{32}$/.test(providerSecretId) && !pro
 for (const forbidden of ['customer.label', 'with:colon', 'ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_ACCESS_TOKEN']) {
   if (!providerSecretId.includes(forbidden)) pass('webhook managed secret id mapping: no raw ref/provider token marker exposed', forbidden);
   else fail('webhook managed secret id mapping: no raw ref/provider token marker exposed', forbidden);
+}
+
+for (const [label, env, expectedOk, expectedMissing] of [
+  ['pilot env cannot pass production readiness', {}, false, ['ACTIONBRIDGE_SECRET_MANAGER_PROVIDER=google_secret_manager_rest', 'ACTIONBRIDGE_SECRET_MANAGER_REQUIRED=true', 'ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_PROJECT_ID', 'ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_ACCESS_TOKEN']],
+  ['managed provider without token still blocks production readiness', { ACTIONBRIDGE_SECRET_MANAGER_PROVIDER: 'google_secret_manager_rest', ACTIONBRIDGE_SECRET_MANAGER_REQUIRED: 'true', ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_PROJECT_ID: 'actionbridge-prod' }, false, ['ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_ACCESS_TOKEN']],
+  ['managed provider with required config passes local preflight shape', { ACTIONBRIDGE_SECRET_MANAGER_PROVIDER: 'google_secret_manager_rest', ACTIONBRIDGE_SECRET_MANAGER_REQUIRED: 'true', ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_PROJECT_ID: 'actionbridge-prod', ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_ACCESS_TOKEN: 'ya29.redacted-test-token' }, true, []],
+]) {
+  const actual = checkSecretManagerProductionReadiness(env);
+  const missingMatches = JSON.stringify(actual.missing) === JSON.stringify(expectedMissing);
+  const noRawToken = !JSON.stringify(actual.resultSummary).includes('ya29.redacted-test-token');
+  if (actual.ok === expectedOk && missingMatches && noRawToken) pass(`webhook secret-manager production readiness: ${label}`, `missing=${actual.missing.length}`);
+  else fail(`webhook secret-manager production readiness: ${label}`, `got ${JSON.stringify(actual)}`);
 }
 
 for (const sourcePath of [

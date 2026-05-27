@@ -12,6 +12,13 @@ export interface ActionBridgeWebhookSigningResolution {
   resultSummary: Record<string, unknown>;
 }
 
+export interface ActionBridgeSecretManagerProductionReadiness {
+  ok: boolean;
+  provider: ActionBridgeSecretManagerProvider;
+  missing: string[];
+  resultSummary: Record<string, unknown>;
+}
+
 function digestSecretRef(secretRef: string): string {
   return crypto.createHash('sha256').update(secretRef).digest('hex').slice(0, 16).toUpperCase();
 }
@@ -38,6 +45,37 @@ function validateSigningSecret(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   if (value.length < 32 || value.length > 4096) return null;
   return value;
+}
+
+export function checkActionBridgeSecretManagerProductionReadiness(env: NodeJS.ProcessEnv = process.env): ActionBridgeSecretManagerProductionReadiness {
+  const provider = normalizeProvider(env);
+  const missing: string[] = [];
+
+  if (provider !== 'google_secret_manager_rest') {
+    missing.push('ACTIONBRIDGE_SECRET_MANAGER_PROVIDER=google_secret_manager_rest');
+  }
+  if (env.ACTIONBRIDGE_SECRET_MANAGER_REQUIRED !== 'true') {
+    missing.push('ACTIONBRIDGE_SECRET_MANAGER_REQUIRED=true');
+  }
+  if (!env.ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_PROJECT_ID) {
+    missing.push('ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_PROJECT_ID');
+  }
+  if (!env.ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_ACCESS_TOKEN) {
+    missing.push('ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_ACCESS_TOKEN');
+  }
+
+  return {
+    ok: missing.length === 0,
+    provider,
+    missing,
+    resultSummary: redactActionBridgeValue({
+      provider,
+      readiness: missing.length === 0 ? 'managed_secret_environment_shape_configured' : 'managed_secret_environment_incomplete',
+      missing,
+      projectConfigured: Boolean(env.ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_PROJECT_ID),
+      accessTokenConfigured: Boolean(env.ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_ACCESS_TOKEN),
+    }) as Record<string, unknown>,
+  };
 }
 
 export function createActionBridgeGoogleSecretManagerSecretId(secretRef: string): string {

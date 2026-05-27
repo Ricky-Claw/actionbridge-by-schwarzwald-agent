@@ -19,6 +19,13 @@ export interface ActionBridgeSecretManagerProductionReadiness {
   resultSummary: Record<string, unknown>;
 }
 
+export interface ActionBridgeSecretManagerLiveAccessProbe {
+  ok: boolean;
+  resultSummary: Record<string, unknown>;
+}
+
+type ActionBridgeSecretManagerFetch = typeof fetch;
+
 function digestSecretRef(secretRef: string): string {
   return crypto.createHash('sha256').update(secretRef).digest('hex').slice(0, 16).toUpperCase();
 }
@@ -78,6 +85,49 @@ export function checkActionBridgeSecretManagerProductionReadiness(env: NodeJS.Pr
   };
 }
 
+export async function probeActionBridgeSecretManagerLiveAccess(input: {
+  secretRef: string;
+  env?: NodeJS.ProcessEnv;
+  fetchImpl?: ActionBridgeSecretManagerFetch;
+}): Promise<ActionBridgeSecretManagerLiveAccessProbe> {
+  const env = input.env || process.env;
+  const readiness = checkActionBridgeSecretManagerProductionReadiness(env);
+  const secretRef = normalizeSecretRef(input.secretRef);
+  if (!readiness.ok || !secretRef) {
+    return {
+      ok: false,
+      resultSummary: redactActionBridgeValue({
+        provider: readiness.provider,
+        readiness: readiness.ok ? 'managed_secret_environment_shape_configured' : 'managed_secret_environment_incomplete',
+        accessAudit: !secretRef ? 'invalid_secret_ref' : 'preflight_incomplete',
+        missing: readiness.missing,
+        secretRefDigest: secretRef ? `sha256:${digestSecretRef(secretRef).toLowerCase()}` : undefined,
+      }) as Record<string, unknown>,
+    };
+  }
+
+  try {
+    const resolved = await resolveGoogleSecretManagerRest({ secretRef, env, fetchImpl: input.fetchImpl });
+    return {
+      ok: Boolean(resolved.secret),
+      resultSummary: redactActionBridgeValue({
+        ...resolved.summary,
+        readiness: resolved.secret ? 'managed_secret_live_access_verified' : 'managed_secret_live_access_failed',
+      }) as Record<string, unknown>,
+    };
+  } catch {
+    return {
+      ok: false,
+      resultSummary: redactActionBridgeValue({
+        provider: 'google_secret_manager_rest',
+        readiness: 'managed_secret_live_access_failed',
+        accessAudit: 'provider_exception',
+        secretRefDigest: `sha256:${digestSecretRef(secretRef).toLowerCase()}`,
+      }) as Record<string, unknown>,
+    };
+  }
+}
+
 export function createActionBridgeGoogleSecretManagerSecretId(secretRef: string): string {
   // Provider-safe deterministic id: Google Secret Manager secret IDs allow letters, numbers, hyphens, and underscores.
   // Do not pass user/operator labels through directly; use a digest-only mapping to avoid provider grammar drift and raw-ref exposure.
@@ -87,6 +137,7 @@ export function createActionBridgeGoogleSecretManagerSecretId(secretRef: string)
 async function resolveGoogleSecretManagerRest(input: {
   secretRef: string;
   env: NodeJS.ProcessEnv;
+  fetchImpl?: ActionBridgeSecretManagerFetch;
 }): Promise<{ secret: string | null; summary: Record<string, unknown> }> {
   const projectId = input.env.ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_PROJECT_ID;
   const token = input.env.ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_ACCESS_TOKEN;
@@ -97,7 +148,8 @@ async function resolveGoogleSecretManagerRest(input: {
   }
 
   const url = `https://secretmanager.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/secrets/${encodeURIComponent(secretId)}/versions/latest:access`;
-  const response = await fetch(url, {
+  const fetchImpl = input.fetchImpl || fetch;
+  const response = await fetchImpl(url, {
     method: 'GET',
     headers: { Authorization: `Bearer ${token}` },
     cache: 'no-store',

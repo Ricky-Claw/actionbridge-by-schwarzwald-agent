@@ -67,6 +67,32 @@ function checkSecretManagerProductionReadiness(env = {}) {
   };
 }
 
+async function probeSecretManagerLiveAccess({ secretRef, env = {}, fetchImpl }) {
+  const readiness = checkSecretManagerProductionReadiness(env);
+  const normalizedSecretRef = normalizeSecretRef(secretRef);
+  const secretRefDigest = normalizedSecretRef ? `sha256:${digestSecretRef(normalizedSecretRef).toLowerCase()}` : undefined;
+  if (!readiness.ok || !normalizedSecretRef) {
+    return {
+      ok: false,
+      resultSummary: {
+        provider: readiness.provider,
+        readiness: readiness.ok ? 'managed_secret_environment_shape_configured' : 'managed_secret_environment_incomplete',
+        accessAudit: !normalizedSecretRef ? 'invalid_secret_ref' : 'preflight_incomplete',
+        missing: readiness.missing,
+        secretRefDigest,
+      },
+    };
+  }
+  const secretId = createGoogleSecretManagerSecretId(normalizedSecretRef);
+  const url = `https://secretmanager.googleapis.com/v1/projects/${encodeURIComponent(env.ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_PROJECT_ID)}/secrets/${encodeURIComponent(secretId)}/versions/latest:access`;
+  const response = await fetchImpl(url, { headers: { Authorization: `Bearer ${env.ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_ACCESS_TOKEN}` } });
+  if (!response.ok) return { ok: false, resultSummary: { provider: 'google_secret_manager_rest', readiness: 'managed_secret_live_access_failed', accessAudit: 'access_denied_or_unavailable', httpStatus: response.status, secretRefDigest } };
+  const body = await response.json();
+  const secret = Buffer.from(body?.payload?.data || '', 'base64').toString('utf8');
+  const ok = secret.length >= 32 && secret.length <= 4096;
+  return { ok, resultSummary: { provider: 'google_secret_manager_rest', readiness: ok ? 'managed_secret_live_access_verified' : 'managed_secret_live_access_failed', accessAudit: ok ? 'accessed_latest_version' : 'invalid_secret_payload', secretRefDigest, versionResourceDigest: body?.name ? `sha256:${crypto.createHash('sha256').update(body.name).digest('hex').slice(0, 16)}` : undefined } };
+}
+
 function resolveActionBridgeWebhookSigningSecret(input) {
   const env = input.env || {};
   if (env.ACTIONBRIDGE_SECRET_MANAGER_PROVIDER === 'google_secret_manager_rest') {
@@ -167,6 +193,52 @@ for (const [label, env, expectedOk, expectedMissing] of [
   if (actual.ok === expectedOk && missingMatches && noRawToken) pass(`webhook secret-manager production readiness: ${label}`, `missing=${actual.missing.length}`);
   else fail(`webhook secret-manager production readiness: ${label}`, `got ${JSON.stringify(actual)}`);
 }
+
+const managedEnv = {
+  ACTIONBRIDGE_SECRET_MANAGER_PROVIDER: 'google_secret_manager_rest',
+  ACTIONBRIDGE_SECRET_MANAGER_REQUIRED: 'true',
+  ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_PROJECT_ID: 'actionbridge-prod',
+  ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_ACCESS_TOKEN: 'ya29.redacted-test-token',
+};
+
+const liveAccessSuccess = await probeSecretManagerLiveAccess({
+  secretRef,
+  env: managedEnv,
+  fetchImpl: async (url, init) => ({
+    ok: true,
+    status: 200,
+    url,
+    init,
+    async json() {
+      return {
+        name: 'projects/actionbridge-prod/secrets/raw-provider-resource-name/versions/latest',
+        payload: { data: Buffer.from('s'.repeat(32), 'utf8').toString('base64') },
+      };
+    },
+  }),
+});
+if (
+  liveAccessSuccess.ok === true &&
+  liveAccessSuccess.resultSummary.readiness === 'managed_secret_live_access_verified' &&
+  liveAccessSuccess.resultSummary.accessAudit === 'accessed_latest_version' &&
+  !JSON.stringify(liveAccessSuccess.resultSummary).includes('ya29.redacted-test-token') &&
+  !JSON.stringify(liveAccessSuccess.resultSummary).includes('raw-provider-resource-name')
+) pass('webhook secret-manager live access proof: mocked managed access verifies without leaking token/resource name');
+else fail('webhook secret-manager live access proof: mocked managed access verifies without leaking token/resource name', JSON.stringify(liveAccessSuccess));
+
+const liveAccessDenied = await probeSecretManagerLiveAccess({
+  secretRef,
+  env: managedEnv,
+  fetchImpl: async () => ({ ok: false, status: 403, async json() { return {}; } }),
+});
+if (liveAccessDenied.ok === false && liveAccessDenied.resultSummary.accessAudit === 'access_denied_or_unavailable' && liveAccessDenied.resultSummary.httpStatus === 403) {
+  pass('webhook secret-manager live access proof: denied IAM/provider response fails closed');
+} else fail('webhook secret-manager live access proof: denied IAM/provider response fails closed', JSON.stringify(liveAccessDenied));
+
+const liveAccessPreflightBlocked = await probeSecretManagerLiveAccess({ secretRef, env: {}, fetchImpl: async () => { throw new Error('must not call provider'); } });
+if (liveAccessPreflightBlocked.ok === false && liveAccessPreflightBlocked.resultSummary.accessAudit === 'preflight_incomplete') {
+  pass('webhook secret-manager live access proof: incomplete preflight blocks before provider call');
+} else fail('webhook secret-manager live access proof: incomplete preflight blocks before provider call', JSON.stringify(liveAccessPreflightBlocked));
 
 for (const sourcePath of [
   'src/frontend/app/api/actionbridge/execute/route.ts',

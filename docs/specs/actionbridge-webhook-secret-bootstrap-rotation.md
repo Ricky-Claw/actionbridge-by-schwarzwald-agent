@@ -1,7 +1,7 @@
 # ActionBridge Webhook-v1 Secret Bootstrap + Rotation
 
 ## Status
-Controlled pilot + production secret-resolver specification. Production webhook signing now has a managed Google Secret Manager REST resolver path with fail-closed behavior and redacted access-audit summaries; production still needs environment provisioning, rotation automation beyond the operator route, and operator UI controls before broad rollout.
+Controlled pilot + production secret-resolver specification. Production webhook signing now has a managed Google Secret Manager REST resolver path, authenticated operator rotation/live-probe routes, and operator UI controls with fail-closed behavior and redacted access-audit summaries. Production still needs real managed environment provisioning, least-privilege runtime identity/token issuance, live probe evidence from that environment, and Sentinel release review before broad rollout.
 
 ## Goals
 - Enable HMAC-signed Webhook-v1 pilot connectors without raw secrets entering ActionBridge DB, logs, UI, setup links, tool catalog, or agent routes.
@@ -118,12 +118,20 @@ Controls:
 
 Evidence is production-qualifying only when `auditPersisted: true`, the corresponding redacted audit row exists, distributed production rate limiting is configured, and Sentinel has reviewed the real managed-environment proof.
 
-Remaining production hardening before broad rollout:
-- scoped service identity and least privilege token issuance;
-- managed environment provisioning;
-- operator UI controls for managed-secret rotation;
-- route-level executable tests for the live-probe contract and negative redaction paths;
-- rotation job or operator workflow with rollback;
-- dual-secret grace window support if automatic retries are introduced;
-- monitoring for unresolved refs and signature failures;
-- Sentinel review and green behavioral route/import tests.
+Production evidence package required before broad rollout:
+1. Provision the managed Secret Manager project/environment and store webhook signing secrets under the digest-only secret IDs generated from server-owned refs.
+2. Issue a least-privilege runtime identity/token that can only access the required ActionBridge webhook-signing secret versions; broad project-owner/editor tokens are not acceptable.
+3. Configure production runtime with:
+   - `ACTIONBRIDGE_SECRET_MANAGER_PROVIDER=google_secret_manager_rest`
+   - `ACTIONBRIDGE_SECRET_MANAGER_REQUIRED=true`
+   - `ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_PROJECT_ID=<managed project>`
+   - `ACTIONBRIDGE_GOOGLE_SECRET_MANAGER_ACCESS_TOKEN=<scoped runtime token>`
+4. Confirm production distributed rate limiting is enabled for the live-probe and execution routes before collecting evidence.
+5. Run `POST /api/actionbridge/ops/secret-manager-live-probe` for a verified owner-scoped HMAC webhook connector.
+6. Preserve only the redacted response/audit evidence: `auditPersisted: true`, `accessAudit: accessed_latest_version`, `secretRefDigest`, optional `versionResourceDigest`, Sentinel policy marker, and the corresponding redacted audit row id. Do not copy raw refs, tokens, provider resource names, or secret payloads into tickets/docs/chat.
+7. Run the dry-run-first operator rotation workflow from `/actionbridge/operator`, then apply only after receiver-smoke evidence is present; keep old/new digest evidence and rollback instruction in the release packet.
+8. Run the green pilot gates plus route/import behavioral checks after managed-secret configuration is present.
+9. Request Sentinel final release review with the redacted evidence package.
+
+Remaining production blocker:
+- external managed Secret Manager/IAM provisioning and real live-access evidence are still missing in this repo/local environment. Until that evidence exists and Sentinel signs off, production/broad rollout remains NO-GO.

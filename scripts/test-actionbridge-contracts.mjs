@@ -863,7 +863,7 @@ if (exists('supabase/migrations/20260515234500_actionbridge_webhook_signing_mode
 
 if (exists('docs/specs/actionbridge-webhook-secret-bootstrap-rotation.md')) {
   const secretRotation = read('docs/specs/actionbridge-webhook-secret-bootstrap-rotation.md');
-  for (const token of ['Webhook-v1 Secret Bootstrap + Rotation', 'ACTIONBRIDGE_WEBHOOK_SIGNING_SECRET_', 'Rotation creates a new ref', 'Existing execution and approval records keep their original idempotency digest', 'never raw refs or secrets', 'KMS/secret-manager backed resolver', '/api/actionbridge/ops/webhook-secret-rotation', 'expectedCurrentDigest', 'X-ActionBridge-Rotation-Confirm']) {
+  for (const token of ['Webhook-v1 Secret Bootstrap + Rotation', 'ACTIONBRIDGE_WEBHOOK_SIGNING_SECRET_', 'Rotation creates a new ref', 'Existing execution and approval records keep their original idempotency digest', 'never raw refs or secrets', 'KMS/secret-manager backed resolver', '/api/actionbridge/ops/webhook-secret-rotation', '/api/actionbridge/ops/secret-manager-live-probe', 'secret_manager.live_probe_verified', 'sentinel.actionbridge.secret_manager.live_probe.v1', 'expectedCurrentDigest', 'X-ActionBridge-Rotation-Confirm']) {
     if (!secretRotation.includes(token)) fail(`webhook secret bootstrap/rotation spec missing ${token}`);
   }
   if (!process.exitCode) pass('Webhook secret bootstrap/rotation spec defines pilot env flow, operator rotation workflow, and production KMS boundary');

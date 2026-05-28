@@ -40,6 +40,7 @@ const DEFAULT_POLICIES: Record<string, ActionBridgeRateLimitPolicy> = {
   backendBridgePairing: { name: 'backendBridgePairing', windowMs: 60_000, max: 10, scope: 'pilot_process_local' },
   webhookDelivery: { name: 'webhookDelivery', windowMs: 60_000, max: 30, scope: 'pilot_process_local' },
   webhookFailureQuarantine: { name: 'webhookFailureQuarantine', windowMs: 15 * 60_000, max: 5, scope: 'pilot_process_local' },
+  secretManagerLiveProbe: { name: 'secretManagerLiveProbe', windowMs: 15 * 60_000, max: 5, scope: 'pilot_process_local' },
 };
 
 type Bucket = { count: number; resetAtMs: number };

@@ -532,6 +532,14 @@ for (const [label, pattern] of [
   else fail(`operator alert digest behavior: ${label}`);
 }
 
+const secretManagerLiveProbeRoute = read('src/frontend/app/api/actionbridge/ops/secret-manager-live-probe/route.ts');
+for (const [label, pattern] of [
+  ['secret manager live probe route is owner scoped, throttled, and writes redacted audit evidence fail-closed', /ACTIONBRIDGE_SECRET_MANAGER_PROBE_AUDIT_UNAVAILABLE[\s\S]*eq\('user_id', user!\.id\)[\s\S]*secretManagerLiveProbe[\s\S]*probeActionBridgeSecretManagerLiveAccess[\s\S]*redacted: true[\s\S]*secret_manager\.live_probe_verified[\s\S]*ACTIONBRIDGE_SECRET_MANAGER_PROBE_AUDIT_FAILED/],
+]) {
+  if (pattern.test(secretManagerLiveProbeRoute)) pass(`secret manager ops behavior: ${label}`);
+  else fail(`secret manager ops behavior: ${label}`);
+}
+
 const backendSdkSource = read('integrations/backend-sdk/typescript/src/index.ts');
 for (const [label, pattern] of [
   ['SDK replay cache requires atomic setIfAbsent contract', /interface ActionBridgeReplayCache[\s\S]*setIfAbsent\(nonce: string, ttlSeconds: number\)/],

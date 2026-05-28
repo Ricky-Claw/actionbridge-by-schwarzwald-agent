@@ -95,10 +95,34 @@ Behavior:
 - Result summaries include only `provider`, `accessAudit`, `secretRefDigest`, optional `versionResourceDigest`, and never raw refs, raw tokens, env names, or secret values.
 - Pilot env lookup is disabled when managed secrets are required, including production mode.
 
+## Managed Secret Live Probe Evidence
+
+`POST /api/actionbridge/ops/secret-manager-live-probe` captures controlled evidence that the runtime can access the managed signing secret for an existing webhook connector.
+
+Request shape:
+
+```json
+{ "connectorId": "<actionbridge_connectors.id>" }
+```
+
+`connector_id` is accepted as a compatibility alias. The route requires an authenticated ActionBridge user session and looks up only a connector owned by that user. It proceeds only for webhook connectors configured as `hmac_sha256` with a server-owned stored `secret_ref`; raw refs cannot be supplied by the caller.
+
+Controls:
+- rate-limit policy: `secretManagerLiveProbe`, discriminated by authenticated user id and connector id;
+- Sentinel policy marker: `sentinel.actionbridge.secret_manager.live_probe.v1`;
+- audit events: `secret_manager.live_probe_verified` and `secret_manager.live_probe_failed`;
+- fail closed before provider access if service audit is unavailable;
+- fail closed before provider access if route rate limiting denies the request;
+- fail closed after provider access if redacted audit persistence fails (`ACTIONBRIDGE_SECRET_MANAGER_PROBE_AUDIT_FAILED`);
+- response and audit summaries include only digest/redacted evidence such as `secretRefDigest`, `versionResourceDigest`, `accessAudit`, `rateLimitKeyDigest`, and `auditPersisted`; never raw secret refs, provider tokens, provider resource names, or secret values.
+
+Evidence is production-qualifying only when `auditPersisted: true`, the corresponding redacted audit row exists, distributed production rate limiting is configured, and Sentinel has reviewed the real managed-environment proof.
+
 Remaining production hardening before broad rollout:
 - scoped service identity and least privilege token issuance;
 - managed environment provisioning;
 - operator UI controls for managed-secret rotation;
+- route-level executable tests for the live-probe contract and negative redaction paths;
 - rotation job or operator workflow with rollback;
 - dual-secret grace window support if automatic retries are introduced;
 - monitoring for unresolved refs and signature failures;

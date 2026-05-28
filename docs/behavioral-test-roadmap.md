@@ -7,8 +7,9 @@ Current gates are strong contract/security marker tests, but production needs be
 `npm test` now includes:
 - `test:behavioral-security`: spec-model checks for endpoint paths, signing modes, and failure persistence semantics.
 - `test:behavioral-modules`: extracts and executes importable/source-level ActionBridge seams where build metadata is unavailable, starting with real `normalizeActionBridgeWebhookEndpointPath(...)` behavior from the connector route.
+- `test:secret-manager-live-probe-route`: executable route-core tests for the managed-secret live-probe path with mocked auth Supabase, service audit client, rate limiter, provider probe, and audit persistence. It covers unauthenticated/missing/not-found/non-HMAC/service-unavailable/rate-limited/audit-failed/success/provider-denied branches plus negative assertions that raw secret refs, tokens, signing secrets, and provider resource names do not reach response or audit summaries.
 
-These gates improve coverage but do not replace full route/integration tests.
+These gates improve coverage but do not replace full deployed Next/Supabase integration tests.
 
 ## Priority 1 — Webhook Endpoint Path
 Behavioral cases:

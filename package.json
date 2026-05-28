@@ -5,7 +5,7 @@
   "description": "ActionBridge universal connector and execution-control layer for Schwarzwald-Agent.",
   "type": "module",
   "scripts": {
-    "test": "npm run test:contracts && npm run test:security && npm run test:behavioral-security && npm run test:behavioral-modules && npm run test:dns-ip && npm run test:visibility-sanitizer && npm run test:multi-target-registry && npm run test:demo-flow",
+    "test": "npm run test:contracts && npm run test:security && npm run test:behavioral-security && npm run test:behavioral-modules && npm run test:secret-manager-live-probe-route && npm run test:dns-ip && npm run test:visibility-sanitizer && npm run test:multi-target-registry && npm run test:demo-flow",
     "test:contracts": "node scripts/test-actionbridge-contracts.mjs",
     "test:security": "node scripts/test-actionbridge-security-gauntlet.mjs",
     "test:behavioral-security": "node scripts/test-actionbridge-behavioral-security.mjs",
@@ -19,7 +19,8 @@
     "test:userflow-smoke": "node scripts/test-actionbridge-userflow-smoke.mjs",
     "audit:high": "node scripts/audit-actionbridge-high.mjs",
     "check": "npm test && npm run typecheck && npm run lint && npm run build && npm run test:userflow-smoke && npm run audit:high && git diff --check",
-    "test:behavioral-modules": "node scripts/test-actionbridge-behavioral-modules.mjs"
+    "test:behavioral-modules": "node scripts/test-actionbridge-behavioral-modules.mjs",
+    "test:secret-manager-live-probe-route": "node scripts/test-actionbridge-secret-manager-live-probe-route.mjs"
   },
   "engines": {
     "node": ">=22"

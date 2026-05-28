@@ -29,6 +29,7 @@ const requiredFiles = [
   'src/frontend/lib/actionbridge/lead-submission.ts',
   'src/frontend/lib/actionbridge/webhook-delivery.ts',
   'src/frontend/lib/actionbridge/webhook-signing.ts',
+  'src/frontend/lib/actionbridge/secret-manager-live-probe-route.ts',
   'src/frontend/lib/actionbridge/embedded-setup-ux.ts',
   'src/frontend/lib/actionbridge/whatsapp-business-adapter.ts',
   'src/frontend/lib/actionbridge/backend-bridge.ts',

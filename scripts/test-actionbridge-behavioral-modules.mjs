@@ -533,10 +533,13 @@ for (const [label, pattern] of [
 }
 
 const secretManagerLiveProbeRoute = read('src/frontend/app/api/actionbridge/ops/secret-manager-live-probe/route.ts');
-for (const [label, pattern] of [
-  ['secret manager live probe route is owner scoped, throttled, and writes redacted audit evidence fail-closed', /ACTIONBRIDGE_SECRET_MANAGER_PROBE_AUDIT_UNAVAILABLE[\s\S]*eq\('user_id', user!\.id\)[\s\S]*secretManagerLiveProbe[\s\S]*probeActionBridgeSecretManagerLiveAccess[\s\S]*redacted: true[\s\S]*secret_manager\.live_probe_verified[\s\S]*ACTIONBRIDGE_SECRET_MANAGER_PROBE_AUDIT_FAILED/],
+const secretManagerLiveProbeCore = read('src/frontend/lib/actionbridge/secret-manager-live-probe-route.ts');
+for (const [label, source, pattern] of [
+  ['route adapter delegates to executable core and serializes rate-limit denials', secretManagerLiveProbeRoute, /handleActionBridgeSecretManagerLiveProbe[\s\S]*policyName: 'secretManagerLiveProbe'[\s\S]*serializeRateLimitResponse/],
+  ['core is owner scoped, audit-fail-closed, and writes redacted live-probe evidence', secretManagerLiveProbeCore, /(?=[\s\S]*ACTIONBRIDGE_SECRET_MANAGER_PROBE_AUDIT_UNAVAILABLE)(?=[\s\S]*eq\('user_id', userId\))(?=[\s\S]*input\.enforceRateLimit)(?=[\s\S]*input\.probeLiveAccess)(?=[\s\S]*redacted: true)(?=[\s\S]*secret_manager\.live_probe_verified)(?=[\s\S]*ACTIONBRIDGE_SECRET_MANAGER_PROBE_AUDIT_FAILED)/],
+  ['core sanitizes raw secret refs and provider resource names from summaries', secretManagerLiveProbeCore, /RAW_SECRET_REF_PATTERN[\s\S]*GOOGLE_SECRET_MANAGER_RESOURCE_PATTERN[\s\S]*sanitizeActionBridgeSecretManagerLiveProbeSummary/],
 ]) {
-  if (pattern.test(secretManagerLiveProbeRoute)) pass(`secret manager ops behavior: ${label}`);
+  if (pattern.test(source)) pass(`secret manager ops behavior: ${label}`);
   else fail(`secret manager ops behavior: ${label}`);
 }
 

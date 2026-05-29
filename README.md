@@ -9,7 +9,7 @@ North star: ActionBridge translates every customer-approved digital capability i
 ## Current pilot capabilities
 
 - Setup links with digest-only tokens.
-- Strong domain verification via DNS TXT, meta tag, or `.well-known`.
+- Strong domain verification via DNS TXT, meta tag, or `.well-known`, including token-scoped customer setup challenge/verification for bound setup links.
 - Connected-only bridge handshake.
 - Capability rules and agent-safe tool catalog without secrets.
 - Approval-gated execution with consume-once idempotency.

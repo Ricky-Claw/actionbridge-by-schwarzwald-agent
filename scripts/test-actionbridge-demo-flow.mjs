@@ -34,6 +34,7 @@ for (const file of orderedDemoPages) {
 const orderedDemoRoutes = [
   'src/frontend/app/api/actionbridge/setup-links/route.ts',
   'src/frontend/app/api/actionbridge/setup-session/route.ts',
+  'src/frontend/app/api/actionbridge/setup-session/verification/route.ts',
   'src/frontend/app/api/actionbridge/connectors/verify/route.ts',
   'src/frontend/app/actionbridge/bridge.js/route.ts',
   'src/frontend/app/api/actionbridge/bridge/handshake/route.ts',
@@ -102,6 +103,10 @@ const setupClient = read('src/frontend/app/actionbridge/setup/ActionBridgeSetupS
 for (const token of ['data-actionbridge-embedded-setup-wizard', 'parseEmbeddedSetupDescriptor', 'Dieser Wizard sammelt nur lokale Auswahlentscheidungen', 'aktiviert keine Execution']) {
   if (setupClient.includes(token)) pass(`Embedded setup wizard UI includes fail-closed marker: ${token}`);
   else fail(`Embedded setup wizard UI missing fail-closed marker: ${token}`);
+}
+for (const token of ["fetch('/api/actionbridge/setup-session/verification'", 'setupSession.canIssueVerificationChallenge', 'Bridge-preview only', "method: 'POST'", "method: 'PATCH'", 'Challenge anfordern', 'Verifikation prüfen', 'kein Human-Attestation-Shortcut']) {
+  if (setupClient.includes(token)) pass(`Customer setup verification UI includes live token-scoped marker: ${token}`);
+  else fail(`Customer setup verification UI missing live token-scoped marker: ${token}`);
 }
 
 const setupSession = read('src/frontend/lib/actionbridge/setup-session.ts');

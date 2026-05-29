@@ -8,6 +8,7 @@ type SetupSessionView = {
   status: string;
   verification: Array<{ method: string; label: string; description: string }>;
   bridgeInstall: { snippet: string };
+  canIssueVerificationChallenge: boolean;
   capabilityChoices: Array<{ name: string; label: string; riskLevel: 'read' | 'write'; requiresApproval: boolean }>;
   expiresAt: string;
 };
@@ -18,6 +19,26 @@ type EmbeddedSetupDescriptor = {
   steps: Array<{ id: string; label: string; operatorOnly: false }>;
   customerControls: Array<'pause' | 'remove' | 'retry'>;
   operatorControlsExcluded: true;
+};
+
+type VerificationChallengeView = {
+  id: string;
+  status: string;
+  origin: string;
+  hostname: string;
+  method: string;
+  challengePath?: string;
+  dnsRecordName?: string;
+  token?: string | null;
+  instructions: string[];
+  expiresAt: string;
+};
+
+type VerificationUiState = {
+  status: 'idle' | 'loading' | 'challenge' | 'verified' | 'failed' | 'error';
+  message: string;
+  challenge?: VerificationChallengeView;
+  evidence?: Record<string, unknown>;
 };
 
 type LoadState =
@@ -49,8 +70,73 @@ function parseEmbeddedSetupDescriptor(value: unknown): EmbeddedSetupDescriptor |
 export default function ActionBridgeSetupSessionClient({ token }: { token: string }) {
   const [state, setState] = useState<LoadState>({ status: token ? 'loading' : 'idle' });
   const [selectedVerification, setSelectedVerification] = useState<string>('');
+  const [verificationState, setVerificationState] = useState<VerificationUiState>({ status: 'idle', message: 'Noch keine Domain-Challenge angefordert.' });
   const [selectedCapabilities, setSelectedCapabilities] = useState<string[]>([]);
   const maskedToken = useMemo(() => maskToken(token), [token]);
+
+  function chooseVerification(method: string) {
+    setSelectedVerification(method);
+    setVerificationState({ status: 'idle', message: 'Challenge für diese Methode noch nicht angefordert.' });
+  }
+
+  async function issueVerificationChallenge() {
+    if (!selectedVerification) {
+      setVerificationState({ status: 'error', message: 'Wähle zuerst DNS TXT, Meta Tag oder .well-known.' });
+      return;
+    }
+    setVerificationState({ status: 'loading', message: 'Domain-Challenge wird über die Setup-Session-API angefordert …' });
+    try {
+      const response = await fetch('/api/actionbridge/setup-session/verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ setupToken: token, method: selectedVerification }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body.verification) {
+        setVerificationState({ status: 'error', message: typeof body.error === 'string' ? body.error : 'ACTIONBRIDGE_SETUP_VERIFICATION_CREATE_FAILED' });
+        return;
+      }
+      setVerificationState({
+        status: body.verification.status === 'verified' ? 'verified' : 'challenge',
+        message: body.verification.status === 'verified'
+          ? 'Domain ist bereits verifiziert. Es wurde keine neue Challenge ausgegeben.'
+          : 'Challenge erstellt. Wert beim Domain-/Website-System eintragen, dann prüfen.',
+        challenge: body.verification,
+      });
+    } catch {
+      setVerificationState({ status: 'error', message: 'Domain-Challenge konnte nicht angefordert werden.' });
+    }
+  }
+
+  async function checkVerificationChallenge() {
+    const challenge = verificationState.challenge;
+    if (!challenge) {
+      setVerificationState({ status: 'error', message: 'Keine Challenge zum Prüfen vorhanden.' });
+      return;
+    }
+    if (!challenge.token) {
+      setVerificationState({ status: 'verified', message: 'Domain ist bereits verifiziert. Keine erneute Prüfung nötig.', challenge });
+      return;
+    }
+    setVerificationState({ ...verificationState, status: 'loading', message: 'Verifikation wird fail-closed geprüft …' });
+    try {
+      const response = await fetch('/api/actionbridge/setup-session/verification', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ setupToken: token, verificationId: challenge.id, verificationToken: challenge.token }),
+      });
+      const body = await response.json().catch(() => ({}));
+      const verification = body.verification || {};
+      setVerificationState({
+        status: response.ok ? 'verified' : 'failed',
+        message: response.ok ? 'Domain verifiziert. Connector bleibt ohne separate Execution-Freigabe.' : typeof body.error === 'string' ? body.error : 'ACTIONBRIDGE_SETUP_VERIFICATION_FAILED',
+        challenge,
+        evidence: verification.evidence,
+      });
+    } catch {
+      setVerificationState({ status: 'error', message: 'Verifikationsprüfung konnte nicht ausgeführt werden.', challenge });
+    }
+  }
 
   useEffect(() => {
     if (!token) return;
@@ -169,7 +255,7 @@ export default function ActionBridgeSetupSessionClient({ token }: { token: strin
                 <button
                   key={item.method}
                   type="button"
-                  onClick={() => setSelectedVerification(item.method)}
+                  onClick={() => chooseVerification(item.method)}
                   className={`w-full rounded-xl border p-3 text-left text-sm ${selectedVerification === item.method ? 'border-emerald-300 bg-emerald-300/10 text-emerald-100' : 'border-white/10 bg-neutral-950 text-neutral-300'}`}
                 >
                   <span className="font-semibold">{item.label}</span>
@@ -177,6 +263,32 @@ export default function ActionBridgeSetupSessionClient({ token }: { token: strin
                 </button>
               ))}
             </div>
+
+            {setupSession.canIssueVerificationChallenge ? (
+              <div className="mt-4 rounded-xl border border-emerald-300/20 bg-emerald-300/10 p-3 text-xs text-emerald-50">
+                <p className="font-semibold">Live Domain-Challenge</p>
+                <p className="mt-1 text-emerald-100/80">Token-scoped API: keine Operator-Session nötig, kein Human-Attestation-Shortcut, kein Execution-Schalter.</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" disabled={!selectedVerification || verificationState.status === 'loading'} onClick={issueVerificationChallenge} className="rounded-xl bg-emerald-300 px-3 py-2 font-black text-neutral-950 disabled:opacity-50">Challenge anfordern</button>
+                  <button type="button" disabled={!verificationState.challenge?.token || verificationState.status === 'loading'} onClick={checkVerificationChallenge} className="rounded-xl border border-white/20 px-3 py-2 font-bold text-emerald-50 disabled:opacity-50">Verifikation prüfen</button>
+                </div>
+                <p className={`mt-3 font-semibold ${verificationState.status === 'error' || verificationState.status === 'failed' ? 'text-rose-200' : verificationState.status === 'verified' ? 'text-emerald-200' : 'text-emerald-50'}`}>{verificationState.message}</p>
+                {verificationState.challenge && (
+                  <div className="mt-3 rounded-xl border border-white/10 bg-neutral-950 p-3 text-neutral-300">
+                    <p className="font-mono text-[11px] text-neutral-500">Verification ID: {verificationState.challenge.id}</p>
+                    <ul className="mt-2 list-disc space-y-1 pl-4">
+                      {verificationState.challenge.instructions.map((instruction) => <li key={instruction}>{instruction}</li>)}
+                    </ul>
+                    <p className="mt-2 text-[11px] text-neutral-500">Prüfen startet einen begrenzten DNS/HTTPS-Check gegen die verknüpfte Kunden-Origin. Nur ausführen, wenn du diese Domain kontrollierst.</p>
+                    {verificationState.evidence && <pre className="mt-2 overflow-auto rounded-lg bg-black/40 p-2 text-[11px] text-neutral-500">{JSON.stringify(verificationState.evidence, null, 2)}</pre>}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="mt-4 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3 text-xs text-amber-100">
+                Bridge-preview only: Dieser Setup-Link ist nicht an einen Connector gebunden. Live Domain-Challenges bleiben verborgen, bis der Operator einen origin-locked Connector auswählt.
+              </div>
+            )}
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-black/20 p-4">

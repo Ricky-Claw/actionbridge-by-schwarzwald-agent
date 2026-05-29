@@ -248,6 +248,7 @@ for (const token of ['not a production distributed abuse-control boundary', 'Edg
 
 const setupLinksRoute = read('src/frontend/app/api/actionbridge/setup-links/route.ts');
 const setupSessionRoute = read('src/frontend/app/api/actionbridge/setup-session/route.ts');
+const setupSessionVerificationRoute = read('src/frontend/app/api/actionbridge/setup-session/verification/route.ts');
 const verifyRoute = read('src/frontend/app/api/actionbridge/connectors/verify/route.ts');
 const capabilitiesRoute = read('src/frontend/app/api/actionbridge/capabilities/route.ts');
 const setupLinksLib = read('src/frontend/lib/actionbridge/setup-links.ts');
@@ -259,6 +260,7 @@ for (const routeSource of [setupLinksRoute, bridgeHandshakeRoute]) {
 for (const [label, source, marker] of [
   ['setup link route rate limit', setupLinksRoute, "policyName: 'setupLinks'"],
   ['setup session rate limit', setupSessionRoute, "policyName: 'setupSession'"],
+  ['setup session verification rate limit', setupSessionVerificationRoute, "policyName: 'domainVerification'"],
   ['bridge handshake rate limit', bridgeHandshakeRoute, "policyName: 'bridgeHandshake'"],
   ['verification rate limit', verifyRoute, "policyName: 'domainVerification'"],
 ]) {
@@ -271,7 +273,9 @@ for (const [label, source, marker] of [
 for (const [label, source, marker] of [
   ['setup link creation audit', setupLinksRoute, "eventName: 'setup_link.created'"],
   ['verification challenge audit', verifyRoute, "eventName: 'domain_verification.challenge_issued'"],
+  ['setup-session verification challenge audit', setupSessionVerificationRoute, "eventName: 'domain_verification.challenge_issued'"],
   ['verification result audit', verifyRoute, "domain_verification.verified"],
+  ['setup-session verification result audit', setupSessionVerificationRoute, "domain_verification.verified"],
   ['connector status audit', verifyRoute, "eventName: 'connector.permission_status.changed'"],
   ['capability rule audit', capabilitiesRoute, "capability_rule.enabled"],
 ]) {
@@ -298,8 +302,20 @@ if (bridgeHandshakeRoute.includes('verifyActionBridgeConnectorSetupTargetOriginB
 } else {
   fail('bridge handshake connector origin lock missing', 'legacy/mismatched setup links must not attach arbitrary origins to connectors');
 }
-if (!verifyRoute.includes('human_attestation')) pass('pilot verification disables human attestation method');
+if (!verifyRoute.includes('human_attestation') && !setupSessionVerificationRoute.includes('human_attestation')) pass('pilot verification disables human attestation method');
 else fail('human attestation pilot gate', 'customer pilot verification must not expose human_attestation as an active method');
+for (const token of ['digestActionBridgeSetupSessionToken', 'setup-session-verification-client', 'verifyActionBridgeConnectorSetupTargetOriginBinding', 'getActiveActionBridgeConnectorQuarantine', 'ACTIONBRIDGE_SETUP_VERIFICATION_CONNECTOR_REQUIRED', 'ACTIONBRIDGE_SETUP_VERIFICATION_CONNECTOR_ORIGIN_MISMATCH', 'ACTIONBRIDGE_SETUP_VERIFICATION_CONNECTOR_NOT_ACTIVATABLE', 'ACTIONBRIDGE_SETUP_VERIFICATION_CONNECTOR_QUARANTINED', "connector.safety_status === 'fail'", "connector.permission_status !== 'draft'", 'verificationToken', 'existingVerification?.status === \'verified\'', 'domain_verification.verified_replay', 'alreadyVerified: true', 'networkExecution: result.networkExecution', 'ACTIONBRIDGE_SETUP_VERIFICATION_UPDATE_FAILED', 'ACTIONBRIDGE_SETUP_VERIFICATION_AUDIT_FAILED', 'ACTIONBRIDGE_SETUP_VERIFICATION_CONNECTOR_UPDATE_FAILED', 'connector.permission_status.verified_noop', 'connector.permission_status.changed']) {
+  if (setupSessionVerificationRoute.includes(token)) pass(`setup-session verification route marker: ${token}`);
+  else fail(`setup-session verification route missing marker: ${token}`);
+}
+if (setupSessionVerificationRoute.includes('auth.getUser') || setupSessionVerificationRoute.includes('base_url') || setupSessionVerificationRoute.includes('secret_ref')) {
+  fail('setup-session verification route boundary', 'token-scoped verification route must not require browser auth or select connector secrets/base URLs');
+} else pass('setup-session verification route is setup-token scoped and avoids connector secret/base URL exposure');
+if (setupSessionVerificationRoute.includes('[89ab][0-9a-f]{3}-[0-9a-f]{12}')) pass('setup-session verification accepts standard 8-4-4-4-12 UUID verification IDs');
+else fail('setup-session verification UUID guard', 'verificationId regex must accept standard UUIDs');
+const persistenceSource = read('src/frontend/lib/actionbridge/persistence.ts');
+if (persistenceSource.includes('networkExecution?: boolean') && persistenceSource.includes('networkExecution: Boolean(input.networkExecution)')) pass('control-plane audit can record real network probe semantics');
+else fail('control-plane audit network semantics', 'domain verification probes must not be forced to networkExecution:false');
 
 const onboardingAuditMigration = read('supabase/migrations/20260515000100_actionbridge_onboarding_audit_triggers.sql');
 if (onboardingAuditMigration.includes('audit_actionbridge_setup_link_status_change') && onboardingAuditMigration.includes("'setup_link.' || NEW.status")) pass('setup link status changes are audited by DB trigger');

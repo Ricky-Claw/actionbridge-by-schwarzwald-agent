@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
   const tokenDigest = digestActionBridgeSetupSessionToken(token);
   const { data: record, error } = await (serviceSupabase as any)
     .from('actionbridge_setup_links')
-    .select('id,target_origin,status,allowed_methods,expires_at')
+    .select('id,connector_id,target_origin,status,allowed_methods,expires_at')
     .eq('token_digest', tokenDigest)
     .maybeSingle();
 

@@ -196,7 +196,7 @@ if (!process.exitCode) {
   if (!process.exitCode) pass('ActionBridge bridge script v1 performs connected-only handshake');
 
   const setupSession = read('src/frontend/lib/actionbridge/setup-session.ts');
-  for (const token of ['createActionBridgeSetupSessionView', 'digestActionBridgeSetupSessionToken', 'isActionBridgeSetupSessionUsable', 'bridgeInstall', 'capabilityChoices', 'site.knowledge.read', 'lead.prepare_draft', 'appointment.request.prepare_draft']) {
+  for (const token of ['createActionBridgeSetupSessionView', 'digestActionBridgeSetupSessionToken', 'isActionBridgeSetupSessionUsable', 'bridgeInstall', 'canIssueVerificationChallenge', 'capabilityChoices', 'site.knowledge.read', 'lead.prepare_draft', 'appointment.request.prepare_draft']) {
     if (!setupSession.includes(token)) fail(`setup-session.ts missing ${token}`);
   }
   if (setupSession.includes('secret_ref') || setupSession.includes('token_digest')) fail('setup-session view must not expose secrets or token digests');
@@ -333,6 +333,7 @@ const routeFiles = [
   'src/frontend/app/api/actionbridge/connectors/verify/route.ts',
   'src/frontend/app/api/actionbridge/setup-links/route.ts',
   'src/frontend/app/api/actionbridge/setup-session/route.ts',
+  'src/frontend/app/api/actionbridge/setup-session/verification/route.ts',
   'src/frontend/app/api/actionbridge/bridge/handshake/route.ts',
   'src/frontend/app/actionbridge/bridge.js/route.ts',
   'src/frontend/app/api/actionbridge/capabilities/route.ts',
@@ -361,6 +362,7 @@ if (!process.exitCode) {
   const connectorVerifyRoute = read('src/frontend/app/api/actionbridge/connectors/verify/route.ts');
   const setupLinksRoute = read('src/frontend/app/api/actionbridge/setup-links/route.ts');
   const setupSessionRoute = read('src/frontend/app/api/actionbridge/setup-session/route.ts');
+  const setupSessionVerificationRoute = read('src/frontend/app/api/actionbridge/setup-session/verification/route.ts');
   const bridgeHandshakeRoute = read('src/frontend/app/api/actionbridge/bridge/handshake/route.ts');
   const bridgeScriptRoute = read('src/frontend/app/actionbridge/bridge.js/route.ts');
   const capabilitiesRoute = read('src/frontend/app/api/actionbridge/capabilities/route.ts');
@@ -442,12 +444,16 @@ if (!process.exitCode) {
     if (!setupLinksRoute.includes(token)) fail(`setup-links route missing ${token}`);
   }
   if (setupLinksRoute.includes('token_digest,') || setupLinksRoute.includes('token_digest)')) fail('setup-links route must not select/return token_digest');
-  for (const token of ['digestActionBridgeSetupSessionToken', 'createActionBridgeSetupSessionView', 'isActionBridgeSetupSessionUsable', 'ACTIONBRIDGE_SETUP_SESSION_NOT_FOUND', "status: 'opened'"]) {
+  for (const token of ['digestActionBridgeSetupSessionToken', 'createActionBridgeSetupSessionView', 'isActionBridgeSetupSessionUsable', 'ACTIONBRIDGE_SETUP_SESSION_NOT_FOUND', 'connector_id,target_origin', "status: 'opened'"]) {
     if (!setupSessionRoute.includes(token)) fail(`setup-session route missing ${token}`);
   }
   if (!setupSessionRoute.includes('createActionBridgeEmbeddedSetupDescriptor')) fail('setup-session route must include embedded setup descriptor');
   if (!setupSessionRoute.includes('embeddedSetup')) fail('setup-session route must return embeddedSetup metadata');
   if (setupSessionRoute.includes('user_id') || setupSessionRoute.includes('secret_ref') || setupSessionRoute.includes(".select('token_digest") || setupSessionRoute.includes('token_digest,')) fail('public setup-session route must not select user_id, secrets, or raw token digests');
+  for (const token of ['digestActionBridgeSetupSessionToken', 'verifyActionBridgeConnectorSetupTargetOriginBinding', 'ACTIONBRIDGE_SETUP_VERIFICATION_CONNECTOR_REQUIRED', 'createActionBridgeVerificationChallenge', 'verifyActionBridgeDomainChallenge', 'domain_verification.challenge_issued', 'domain_verification.verified', 'connector.permission_status.changed']) {
+    if (!setupSessionVerificationRoute.includes(token)) fail(`setup-session verification route missing ${token}`);
+  }
+  if (setupSessionVerificationRoute.includes('auth.getUser')) fail('setup-session verification must be setup-token scoped, not browser-auth scoped');
   for (const token of ['parseActionBridgeBridgeHandshake', 'actionbridge_setup_links', 'actionbridge_bridge_installations', 'originHeader && originHeader !== parsed.origin', 'connected_only']) {
     if (!bridgeHandshakeRoute.includes(token)) fail(`bridge handshake route missing ${token}`);
   }

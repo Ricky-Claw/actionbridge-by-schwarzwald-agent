@@ -6,6 +6,7 @@ import type { ActionBridgeSetupVerificationMethod } from './setup-links';
 export interface ActionBridgeSetupSessionRecord {
   id: string;
   target_origin: string;
+  connector_id?: string | null;
   status: 'pending' | 'opened' | 'completed' | 'revoked' | 'expired';
   allowed_methods: ActionBridgeSetupVerificationMethod[];
   expires_at: string;
@@ -16,6 +17,7 @@ export interface ActionBridgeSetupSessionView {
   targetOrigin: string;
   status: ActionBridgeSetupSessionRecord['status'];
   allowedMethods: ActionBridgeSetupVerificationMethod[];
+  canIssueVerificationChallenge: boolean;
   verification: Array<{
     method: ActionBridgeSetupVerificationMethod;
     label: string;
@@ -45,6 +47,7 @@ export function createActionBridgeSetupSessionView(record: ActionBridgeSetupSess
     targetOrigin: record.target_origin,
     status: record.status,
     allowedMethods,
+    canIssueVerificationChallenge: Boolean(record.connector_id),
     verification: allowedMethods.map((method) => ({
       method,
       label: method === 'dns_txt' ? 'DNS TXT' : method === 'meta_tag' ? 'Meta Tag' : '.well-known Datei',

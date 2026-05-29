@@ -60,6 +60,7 @@ export interface PersistActionBridgeControlAuditEventInput {
   input?: unknown;
   status: 'pending' | 'succeeded' | 'failed' | 'denied';
   resultSummary?: Record<string, unknown> | null;
+  networkExecution?: boolean;
 }
 
 export async function createActionBridgeApproval(
@@ -131,7 +132,7 @@ export async function persistActionBridgeControlAuditEvent(
     resultSummary: {
       ...(input.resultSummary || {}),
       controlPlane: true,
-      networkExecution: false,
+      networkExecution: Boolean(input.networkExecution),
     },
   });
 }

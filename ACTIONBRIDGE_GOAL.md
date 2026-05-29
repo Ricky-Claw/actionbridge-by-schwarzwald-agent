@@ -80,8 +80,8 @@ ActionBridge gilt als fertig, wenn:
 - Hauptflow Setup-Link → Verifikation → Bridge/Adapter → Capability → Tool-Catalog → Approval → kontrollierte Connector-Execution funktioniert.
 - Schwarzwald-Agent kann den Tool-Catalog nutzen und ActionBridge-Ausführung aufrufen.
 - Mindestens ein echter, geprüfter Connector-Delivery-Pfad funktioniert ohne Mock-Fassade.
-- Tests grün: contracts, security, DNS/IP, visibility sanitizer, demo/smoke flow.
-- Build/Typecheck grün, sobald Build-Metadaten vorhanden sind.
+- Tests grün: contracts, security, behavioral route/module checks, DNS/IP, visibility sanitizer, demo/smoke flow.
+- Build, Typecheck, Lint und Browser/Userflow-Smoke grün.
 - Keine kritischen/high Security Findings offen.
 - Keine versteckten Demo-/Mock-Abhängigkeiten im Produktpfad.
 - Setup und Pilot-Runbook sind dokumentiert.
@@ -90,22 +90,22 @@ ActionBridge gilt als fertig, wenn:
 - Sentinel gibt GO für Pilot; Produktion braucht separate GO.
 
 ## 9. Aktuelle Risiken / offene Entscheidungen
-- `lead.submit` ist aktuell ein sicherer interner Connector-Delivery-State, noch kein geprüfter externer CRM/Formular/Webhook-Adapter.
-- Kein Lead-/Inbox-Produkt bauen; Produktnutzen muss über Schwarzwald-Agent und Kundensysteme sichtbar werden.
-- Pilot-Rate-Limit-Gates für öffentliche Setup-/Handshake-/Verification-Endpunkte sind vorhanden, aber nur process-local; Produktion braucht verteiltes Redis/KV/CDN/WAF Rate Limiting.
-- Kein echter Next/TypeScript Build-Gate im Repo sichtbar (`tsconfig`/Next config fehlt).
-- Production network/write execution braucht staging SSRF/DNS Tests und separate Freigabe.
-- Dashboard UX ist Demo/Skeleton, noch nicht voll produktiv.
-- Nächste Produktentscheidung: erster externer Delivery-Adapter wahrscheinlich **Webhook-v1**, weil er universell ist und ActionBridge als Connector beweist, ohne Schwarzwald-Agent Integration vorauszusetzen.
+- ActionBridge ist aktuell **controlled-pilot capable**, aber noch nicht für Broad Production freigegeben.
+- Webhook-v1 ist der erste echte externe Connector-Delivery-Pfad und ersetzt die frühere Adapter-Entscheidung; `lead.submit` bleibt weiterhin nur Connector-Delivery-State, kein Lead-/Inbox-Produkt.
+- Größter offener Production-Gate: reale managed Secret Manager/KMS-Umgebung mit Least-Privilege Runtime Identity/Token, Live-Probe-Evidence, redacted Audit-Beweis und finalem Sentinel Release Review. Lokale Resolver-, Route- und Redaction-Tests existieren, ersetzen aber keine echte Infrastruktur-Evidence.
+- Production Rate Limiting ist als distributed Upstash-Redis/Trusted-Proxy-Pfad implementiert, muss im Deployment aber korrekt provisioniert und fail-closed konfiguriert sein.
+- Build/Typecheck/Lint/Userflow-Smoke sind wieder echte Gates; zusätzlich braucht Production später deployed Staging-Browser-, SSRF-/DNS- und Release-Smoke-Evidence.
+- Operator/Kunden-UX ist pilotfähig, aber vor Premium-Rollout weiter auf leere Zustände, Fehlermeldungen, Evidence-Packets und Setup-Klarheit zu härten.
+- Schwarzwald-Agent Integration bleibt zurückgestellt, bis ActionBridge standalone GO hat.
 
 ## 10. Nächste 10 Arbeitsschritte nach Priorität
-1. Scope bereinigen: keine Lead-Outbox-UI/API als Produktziel; `lead.submit` nur als Connector-Delivery-State behandeln.
-2. Pilot-Runbook schreiben: Setup, Domain Verification, Capability, Approval, Connector-Execution, Revoke/Kill-Switch.
-3. Verteiltes Production-Rate-Limit-Konzept vorbereiten: Redis/KV/CDN/WAF, trusted proxy headers, tenant/connector/token scopes.
-4. Ersten echten externen Adapter spezifizieren und bauen: Webhook-v1 mit Schema, Allowlist, Auth-Ref, Retry/Fallback, Rate Limit, Audit.
-5. Setup/Operator UX aktualisieren: ActionBridge als Connector erklären, nicht als CRM/Lead-Inbox.
-6. Typecheck/Build-Struktur definieren oder dokumentieren, warum aktuell nicht ausführbar.
-7. Staging Demo Tenant Flow ohne externe Risiken dokumentieren und smoke-testbar machen.
-8. Sentinel/Nexus Review-Artefakte für MVP-GO aktualisieren und offene Production-Gates trennen.
-9. Danach erst Schwarzwald-Agent Integration vorbereiten, wenn ActionBridge standalone DoD erfüllt.
-10. Production hardening: monitoring, quarantine, retention/GDPR export, staging SSRF/DNS tests.
+1. Elvis/Ricky-Infrastrukturentscheidung einholen und managed Secret Manager/KMS + Least-Privilege Runtime Identity/Token bereitstellen; ohne diese Secrets/Access bleibt Production NO-GO.
+2. Redacted Production-Evidence-Paket sammeln: Secret-Manager-Live-Probe mit `auditPersisted: true`, zugehöriger Audit-Row, distributed Rate-Limit-Konfiguration, dry-run-first Rotation, Receiver-Smoke und grüne Gates.
+3. Sentinel final release review für das reale managed-secret Evidence-Paket durchführen; Critical/High Findings blockieren Release.
+4. Deployed Staging-Smoke ergänzen: Setup → Verification → Bridge/Adapter → Capability → Tool-Catalog → Approval → Webhook-v1 Delivery ohne Mock-Fassade.
+5. Deployed SSRF/DNS/Rebinding- und pinned-connection Tests gegen Staging ergänzen; keine Production-Netzwerkfreigabe ohne diese Evidence.
+6. Operator/Kunden-UX auf Premium-Niveau härten: leere Zustände, fehlgeschlagene Verification, Quarantine/Pause, Secret-Rotation-Evidence und klare Connector-only Copy.
+7. Pilot-/Production-Runbooks finalisieren: Provisioning, Rate Limits, Secret Rotation/Rollback, Quarantine, Retention/GDPR, Alert-Digest-Handoff und Kill-Switch.
+8. Optionalen zweiten Adapter erst nach Secret-/Staging-GO planen; Webhook-v1 bleibt der Beweis-Adapter bis Sentinel GO.
+9. Danach erst Schwarzwald-Agent Dashboard Integration vorbereiten, wenn standalone DoD und Sentinel Pilot-GO erfüllt sind.
+10. Premium-Hardening: Monitoring, Quarantine-Automation, Compliance-Export, zusätzliche Plattformadapter und Release-Gates.

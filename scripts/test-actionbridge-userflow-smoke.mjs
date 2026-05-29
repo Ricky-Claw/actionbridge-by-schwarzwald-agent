@@ -16,7 +16,7 @@ const routes = [
   },
   {
     path: '/actionbridge/operator',
-    mustContain: ['Operator', 'setup', 'Receiver smoke-test evidence required before apply'],
+    mustContain: ['Operator', 'Live setup link generator', 'Receiver smoke-test evidence required before apply'],
   },
   {
     path: '/actionbridge/wizard',

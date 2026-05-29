@@ -30,7 +30,7 @@ ActionBridge is suitable for controlled pilot continuation only. This checklist 
 - [x] Pilot process-local rate limiter.
 - [x] Pilot webhook delivery throttle.
 - [x] Pilot webhook failure quarantine signal.
-- [x] Success and denial rate-limit headers for token-adjacent routes.
+- [x] Success and denial rate-limit headers for token-adjacent routes. _Setup-link create/list now uses the shared `setupLinks` policy with redacted rate-limit headers before token issuance/listing._
 - [x] Distributed atomic rate limiter. _Production distributed mode now requires trusted proxy identity and a configured Upstash Redis REST provider, increments a Redis counter before allowing requests, fail-closes when the store/config/response is unavailable, and keeps pilot process-local mode unchanged._
 - [x] Trusted proxy/header fail-closed enforcement for production mode.
 - [x] Durable connector pause/quarantine operator API.
@@ -64,6 +64,7 @@ ActionBridge is suitable for controlled pilot continuation only. This checklist 
 - [x] Embedded setup-plugin UX boundary documented.
 - [x] Embedded setup wizard UI implemented. _Customer setup page now renders an embedded setup wizard from the API-provided `actionbridge.embedded_setup.v1` descriptor, lets customers choose verification method/capability intents locally, and keeps activation fail-closed until server verification, bridge handshake, capability API, approvals, and audit controls pass._
 - [x] Standalone setup UX consumes real API state instead of explanatory static pages. _Customer setup page now resolves the public setup token through `/api/actionbridge/setup-session`, renders target origin/status/expiry, API-provided verification methods, masked bridge snippet, and capability choices, and fails closed when the session is missing or invalid._
+- [x] Operator setup-link UX consumes the real setup-links API. _Operator cockpit now creates setup links through authenticated JSON `POST /api/actionbridge/setup-links`, loads owner-scoped recent links through `GET /api/actionbridge/setup-links`, displays the raw setup token only in the one creation response, and avoids static demo customer values._
 - [x] Operator-facing smoke runbook for pilot.
 
 ## Rule

@@ -78,9 +78,24 @@ for (const token of ['ActionBridge Experience Map', 'Every approved website beco
 for (const forbidden of ['token_digest', 'service_role', 'secret_ref', 'idempotency_key', 'document.cookie', 'localStorage']) {
   if (uiSource.includes(forbidden)) fail(`100k MVP UI contains forbidden sensitive/internal marker: ${forbidden}`);
 }
-if (read('src/frontend/app/actionbridge/operator/page.tsx').includes('method="post"')) {
+const operatorPage = read('src/frontend/app/actionbridge/operator/page.tsx');
+const operatorSetupClient = read('src/frontend/app/actionbridge/operator/ActionBridgeSetupLinksClient.tsx');
+if (operatorPage.includes('method="post"')) {
   fail('Operator shell must not use native HTML POST because setup-links expects JSON');
 } else pass('Operator shell avoids broken native POST to JSON endpoint');
+if (operatorPage.includes('ActionBridgeSetupLinksClient')
+  && operatorSetupClient.includes("fetch('/api/actionbridge/setup-links'")
+  && operatorSetupClient.includes("method: 'POST'")
+  && operatorSetupClient.includes("'Content-Type': 'application/json'")
+  && operatorSetupClient.includes('body.setupLink?.token')
+  && operatorSetupClient.includes('Shown once setup URL')) {
+  pass('Operator setup-link UX calls the real JSON API and shows the setup token only in the creation response');
+} else {
+  fail('Operator setup-link UX must call the real JSON API and handle the shown-once setup token');
+}
+for (const forbidden of ['https://demo-customer.example', 'JSON API next', 'readOnly']) {
+  if (operatorPage.includes(forbidden) || operatorSetupClient.includes(forbidden)) fail(`Operator setup-link UX still contains static shell marker: ${forbidden}`);
+}
 
 const setupClient = read('src/frontend/app/actionbridge/setup/ActionBridgeSetupSessionClient.tsx');
 for (const token of ['data-actionbridge-embedded-setup-wizard', 'parseEmbeddedSetupDescriptor', 'Dieser Wizard sammelt nur lokale Auswahlentscheidungen', 'aktiviert keine Execution']) {

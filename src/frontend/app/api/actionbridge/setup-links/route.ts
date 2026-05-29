@@ -6,6 +6,7 @@ import { createCoreServiceClient } from '@/lib/core/service-client';
 import { redactActionBridgeValue } from '@/lib/actionbridge/redaction';
 import { createActionBridgeSetupLinkDraft } from '@/lib/actionbridge/setup-links';
 import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
+import { createActionBridgeRateLimitHeaders, enforceActionBridgeRateLimitAsync } from '@/lib/actionbridge/rate-limit';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -18,9 +19,12 @@ async function requireActionBridgeUser() {
   return { supabase, user, response: null };
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const { supabase, user, response } = await requireActionBridgeUser();
   if (response) return response;
+
+  const rateLimit = await enforceActionBridgeRateLimitAsync({ request, policyName: 'setupLinks', discriminator: `${user!.id}|list` });
+  if (!rateLimit.ok) return rateLimit.response!;
 
   const { data, error } = await (supabase as any)
     .from('actionbridge_setup_links')
@@ -42,6 +46,8 @@ export async function GET() {
       createdAt: link.created_at,
       expiresAt: link.expires_at,
     })),
+  }, {
+    headers: createActionBridgeRateLimitHeaders({ policyName: 'setupLinks', remaining: rateLimit.remaining, resetAt: rateLimit.resetAt }),
   });
 }
 
@@ -56,6 +62,9 @@ export async function POST(request: NextRequest) {
     : typeof bodyObject.connector_id === 'string'
       ? bodyObject.connector_id.trim()
       : null;
+
+  const rateLimit = await enforceActionBridgeRateLimitAsync({ request, policyName: 'setupLinks', discriminator: `${user!.id}|create` });
+  if (!rateLimit.ok) return rateLimit.response!;
 
   if (connectorId && !UUID_PATTERN.test(connectorId)) {
     return NextResponse.json({ error: 'INVALID_ACTIONBRIDGE_SETUP_LINK_CONNECTOR', redactedInput: redactActionBridgeValue(bodyObject) }, { status: 400 });
@@ -117,5 +126,8 @@ export async function POST(request: NextRequest) {
       createdAt: data.created_at,
       expiresAt: data.expires_at,
     },
-  }, { status: 201 });
+  }, {
+    status: 201,
+    headers: createActionBridgeRateLimitHeaders({ policyName: 'setupLinks', remaining: rateLimit.remaining, resetAt: rateLimit.resetAt }),
+  });
 }

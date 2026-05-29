@@ -34,6 +34,7 @@ interface DistributedCounterResult {
 }
 
 const DEFAULT_POLICIES: Record<string, ActionBridgeRateLimitPolicy> = {
+  setupLinks: { name: 'setupLinks', windowMs: 60_000, max: 20, scope: 'pilot_process_local' },
   setupSession: { name: 'setupSession', windowMs: 60_000, max: 30, scope: 'pilot_process_local' },
   bridgeHandshake: { name: 'bridgeHandshake', windowMs: 60_000, max: 20, scope: 'pilot_process_local' },
   domainVerification: { name: 'domainVerification', windowMs: 60_000, max: 20, scope: 'pilot_process_local' },

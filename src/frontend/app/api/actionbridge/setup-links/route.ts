@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createCoreServiceClient } from '@/lib/core/service-client';
 import { redactActionBridgeValue } from '@/lib/actionbridge/redaction';
-import { createActionBridgeSetupLinkDraft } from '@/lib/actionbridge/setup-links';
+import { createActionBridgeSetupLinkDraft, verifyActionBridgeConnectorSetupTargetOriginBinding } from '@/lib/actionbridge/setup-links';
 import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
 import { createActionBridgeRateLimitHeaders, enforceActionBridgeRateLimitAsync } from '@/lib/actionbridge/rate-limit';
 
@@ -70,19 +70,35 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'INVALID_ACTIONBRIDGE_SETUP_LINK_CONNECTOR', redactedInput: redactActionBridgeValue(bodyObject) }, { status: 400 });
   }
 
-  if (connectorId) {
-    const { data: connector } = await (supabase as any)
-      .from('actionbridge_connectors')
-      .select('id')
-      .eq('user_id', user!.id)
-      .eq('id', connectorId)
-      .maybeSingle();
-    if (!connector) return NextResponse.json({ error: 'ACTIONBRIDGE_CONNECTOR_NOT_FOUND' }, { status: 404 });
-  }
-
   const draft = createActionBridgeSetupLinkDraft({ targetOrigin: bodyObject.targetOrigin ?? bodyObject.target_origin });
   if (!draft) {
     return NextResponse.json({ error: 'INVALID_ACTIONBRIDGE_SETUP_LINK_TARGET', redactedInput: redactActionBridgeValue(bodyObject) }, { status: 400 });
+  }
+
+  if (connectorId) {
+    const bindingStatus = await verifyActionBridgeConnectorSetupTargetOriginBinding(supabase as any, {
+      userId: user!.id,
+      connectorId,
+      targetOrigin: draft.targetOrigin,
+    });
+    if (bindingStatus === 'connector_not_found') return NextResponse.json({ error: 'ACTIONBRIDGE_CONNECTOR_NOT_FOUND' }, { status: 404 });
+    if (bindingStatus !== 'matched') {
+      const auditSupabase = createCoreServiceClient();
+      if (auditSupabase) {
+        await persistActionBridgeControlAuditEvent(auditSupabase, {
+          userId: user!.id,
+          connectorId,
+          eventName: 'setup_link.denied',
+          input: { targetOrigin: draft.targetOrigin, connectorId },
+          status: 'denied',
+          resultSummary: { reason: 'ACTIONBRIDGE_SETUP_LINK_CONNECTOR_ORIGIN_MISMATCH' },
+        });
+      }
+      return NextResponse.json({
+        error: 'ACTIONBRIDGE_SETUP_LINK_CONNECTOR_ORIGIN_MISMATCH',
+        redactedInput: redactActionBridgeValue(bodyObject),
+      }, { status: 409 });
+    }
   }
 
   const serviceSupabase = createCoreServiceClient();

@@ -150,7 +150,7 @@ export default function ActionBridgeSetupLinksClient() {
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-cyan-300">Operator control</p>
           <h2 className="mt-2 text-2xl font-bold text-white">Live setup link generator</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">
-            Calls the authenticated JSON setup-link API, stores only the token digest server-side, and returns the raw customer token only for this creation response.
+            Calls the authenticated JSON setup-link API, stores only the token digest server-side, origin-locks connector bindings, and returns the raw customer token only for this creation response.
           </p>
         </div>
         <button disabled={busy} onClick={refresh} className="rounded-xl bg-white px-3 py-2 text-sm font-bold text-slate-950 disabled:opacity-60">Refresh</button>
@@ -176,12 +176,12 @@ export default function ActionBridgeSetupLinksClient() {
         <label className="space-y-2">
           <span className="text-sm font-semibold text-slate-200">Optional connector binding</span>
           <select value={connectorId} onChange={(event) => setConnectorId(event.target.value)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-slate-100">
-            <option value="">No connector yet</option>
+            <option value="">No connector yet · bridge-only preview</option>
             {connectors.map((connector) => (
               <option key={connector.id} value={connector.id}>{connector.name} · {connector.type}</option>
             ))}
           </select>
-          <span className="block text-xs text-slate-500">Binding is owner-scoped by the API before creation.</span>
+          <span className="block text-xs text-slate-500">Binding is owner-scoped and origin-locked by the API before creation.</span>
         </label>
 
         <button disabled={busy || !targetOrigin.trim()} onClick={createSetupLink} className="self-end rounded-2xl bg-cyan-300 px-5 py-3 font-semibold text-slate-950 disabled:opacity-60" type="button">

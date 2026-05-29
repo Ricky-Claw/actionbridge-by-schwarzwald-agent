@@ -88,10 +88,11 @@ if (operatorPage.includes('ActionBridgeSetupLinksClient')
   && operatorSetupClient.includes("method: 'POST'")
   && operatorSetupClient.includes("'Content-Type': 'application/json'")
   && operatorSetupClient.includes('body.setupLink?.token')
-  && operatorSetupClient.includes('Shown once setup URL')) {
-  pass('Operator setup-link UX calls the real JSON API and shows the setup token only in the creation response');
+  && operatorSetupClient.includes('Shown once setup URL')
+  && operatorSetupClient.includes('origin-locks connector bindings')) {
+  pass('Operator setup-link UX calls the real JSON API, origin-locks connector binding, and shows the setup token only in the creation response');
 } else {
-  fail('Operator setup-link UX must call the real JSON API and handle the shown-once setup token');
+  fail('Operator setup-link UX must call the real JSON API, explain origin-locked connector binding, and handle the shown-once setup token');
 }
 for (const forbidden of ['https://demo-customer.example', 'JSON API next', 'readOnly']) {
   if (operatorPage.includes(forbidden) || operatorSetupClient.includes(forbidden)) fail(`Operator setup-link UX still contains static shell marker: ${forbidden}`);

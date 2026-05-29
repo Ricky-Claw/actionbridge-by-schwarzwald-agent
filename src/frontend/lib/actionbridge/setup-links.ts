@@ -15,6 +15,13 @@ export interface ActionBridgeSetupLinkDraft {
   setupPath: string;
 }
 
+export interface ActionBridgeSetupOriginBindingConnector {
+  base_url?: unknown;
+  baseUrl?: unknown;
+  allowed_origins?: unknown;
+  allowedOrigins?: unknown;
+}
+
 export function normalizeActionBridgeSetupLinkOrigin(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   let parsedUrl: URL;
@@ -28,6 +35,65 @@ export function normalizeActionBridgeSetupLinkOrigin(value: unknown): string | n
   if (parsedUrl.pathname !== '/' || parsedUrl.search || parsedUrl.hash) return null;
   if (isPrivateActionBridgeHost(parsedUrl.hostname)) return null;
   return parsedUrl.origin;
+}
+
+export function normalizeActionBridgeConnectorBindingOrigin(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(value);
+  } catch {
+    return null;
+  }
+  if (parsedUrl.protocol !== 'https:') return null;
+  if (parsedUrl.username || parsedUrl.password) return null;
+  if (isPrivateActionBridgeHost(parsedUrl.hostname)) return null;
+  return parsedUrl.origin;
+}
+
+export function actionBridgeConnectorAllowsSetupTargetOrigin(
+  connector: ActionBridgeSetupOriginBindingConnector,
+  targetOrigin: unknown,
+): boolean {
+  const normalizedTargetOrigin = normalizeActionBridgeSetupLinkOrigin(targetOrigin);
+  if (!normalizedTargetOrigin) return false;
+
+  const connectorOrigins = new Set<string>();
+  const baseOrigin = normalizeActionBridgeConnectorBindingOrigin(connector.base_url ?? connector.baseUrl);
+  if (!baseOrigin) return false;
+  connectorOrigins.add(baseOrigin);
+
+  const allowedOrigins = Array.isArray(connector.allowed_origins)
+    ? connector.allowed_origins
+    : Array.isArray(connector.allowedOrigins)
+      ? connector.allowedOrigins
+      : [];
+  for (const allowedOrigin of allowedOrigins) {
+    const normalizedAllowedOrigin = normalizeActionBridgeConnectorBindingOrigin(allowedOrigin);
+    if (normalizedAllowedOrigin) connectorOrigins.add(normalizedAllowedOrigin);
+  }
+
+  return connectorOrigins.has(normalizedTargetOrigin);
+}
+
+type ActionBridgeSupabaseLike = { from: (table: string) => any };
+
+export type ActionBridgeConnectorSetupTargetOriginBindingStatus = 'matched' | 'connector_not_found' | 'origin_mismatch';
+
+export async function verifyActionBridgeConnectorSetupTargetOriginBinding(
+  supabase: ActionBridgeSupabaseLike,
+  input: { userId: string; connectorId: string; targetOrigin: unknown },
+): Promise<ActionBridgeConnectorSetupTargetOriginBindingStatus> {
+  const { data: connector } = await supabase
+    .from('actionbridge_connectors')
+    .select('id,base_url,allowed_origins')
+    .eq('user_id', input.userId)
+    .eq('id', input.connectorId)
+    .maybeSingle();
+
+  if (!connector) return 'connector_not_found';
+  if (!actionBridgeConnectorAllowsSetupTargetOrigin(connector, input.targetOrigin)) return 'origin_mismatch';
+  return 'matched';
 }
 
 export function createActionBridgeSetupLinkToken(): string {

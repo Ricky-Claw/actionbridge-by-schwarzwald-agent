@@ -6,6 +6,7 @@ ActionBridge is suitable for controlled pilot continuation only. This checklist 
 ## Gate 1 — Connector Execution Safety
 - [x] Server-owned connector configuration.
 - [x] Exact HTTPS origin allowlist.
+- [x] Setup-link connector binding origin lock. _Bound setup links now require the customer target origin to match the connector base/allowed origin before token issuance; bridge handshake rechecks the binding before completing a setup link so legacy/mismatched rows cannot attach arbitrary origins to a connector._
 - [x] Private/local/internal host rejection.
 - [x] Webhook-v1 no redirects.
 - [x] Webhook-v1 pinned outbound connection to validated DNS result.
@@ -64,7 +65,7 @@ ActionBridge is suitable for controlled pilot continuation only. This checklist 
 - [x] Embedded setup-plugin UX boundary documented.
 - [x] Embedded setup wizard UI implemented. _Customer setup page now renders an embedded setup wizard from the API-provided `actionbridge.embedded_setup.v1` descriptor, lets customers choose verification method/capability intents locally, and keeps activation fail-closed until server verification, bridge handshake, capability API, approvals, and audit controls pass._
 - [x] Standalone setup UX consumes real API state instead of explanatory static pages. _Customer setup page now resolves the public setup token through `/api/actionbridge/setup-session`, renders target origin/status/expiry, API-provided verification methods, masked bridge snippet, and capability choices, and fails closed when the session is missing or invalid._
-- [x] Operator setup-link UX consumes the real setup-links API. _Operator cockpit now creates setup links through authenticated JSON `POST /api/actionbridge/setup-links`, loads owner-scoped recent links through `GET /api/actionbridge/setup-links`, displays the raw setup token only in the one creation response, and avoids static demo customer values._
+- [x] Operator setup-link UX consumes the real setup-links API. _Operator cockpit now creates setup links through authenticated JSON `POST /api/actionbridge/setup-links`, loads owner-scoped recent links through `GET /api/actionbridge/setup-links`, displays the raw setup token only in the one creation response, explains bridge-only preview for unbound links, origin-locks connector bindings, and avoids static demo customer values._
 - [x] Operator-facing smoke runbook for pilot.
 
 ## Rule

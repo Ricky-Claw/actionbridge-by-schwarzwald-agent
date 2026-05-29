@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createCoreServiceClient } from '@/lib/core/service-client';
 import { parseActionBridgeBridgeHandshake } from '@/lib/actionbridge/bridge-handshake';
+import { verifyActionBridgeConnectorSetupTargetOriginBinding } from '@/lib/actionbridge/setup-links';
 import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
 import { createActionBridgeRateLimitHeaders, enforceActionBridgeRateLimitAsync } from '@/lib/actionbridge/rate-limit';
 
@@ -33,6 +34,28 @@ export async function POST(request: NextRequest) {
   if (setupLink.target_origin !== parsed.origin) return NextResponse.json({ error: 'ACTIONBRIDGE_BRIDGE_ORIGIN_MISMATCH' }, { status: 403 });
   if (!['pending', 'opened'].includes(setupLink.status) || new Date(setupLink.expires_at).getTime() < Date.now()) {
     return NextResponse.json({ error: 'ACTIONBRIDGE_SETUP_LINK_EXPIRED_OR_REVOKED' }, { status: 409 });
+  }
+
+  if (setupLink.connector_id) {
+    const bindingStatus = await verifyActionBridgeConnectorSetupTargetOriginBinding(serviceSupabase as any, {
+      userId: setupLink.user_id,
+      connectorId: setupLink.connector_id,
+      targetOrigin: setupLink.target_origin,
+    });
+    if (bindingStatus === 'connector_not_found') {
+      return NextResponse.json({ error: 'ACTIONBRIDGE_BRIDGE_CONNECTOR_BINDING_NOT_FOUND' }, { status: 409 });
+    }
+    if (bindingStatus !== 'matched') {
+      await persistActionBridgeControlAuditEvent(serviceSupabase, {
+        userId: setupLink.user_id,
+        connectorId: setupLink.connector_id,
+        eventName: 'bridge.handshake.denied',
+        input: { setupLinkId: setupLink.id, targetOrigin: parsed.origin, bridgeVersion: parsed.bridgeVersion },
+        status: 'denied',
+        resultSummary: { reason: 'ACTIONBRIDGE_BRIDGE_CONNECTOR_ORIGIN_MISMATCH' },
+      });
+      return NextResponse.json({ error: 'ACTIONBRIDGE_BRIDGE_CONNECTOR_ORIGIN_MISMATCH' }, { status: 409 });
+    }
   }
 
   const now = new Date().toISOString();

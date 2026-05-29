@@ -250,6 +250,12 @@ const setupLinksRoute = read('src/frontend/app/api/actionbridge/setup-links/rout
 const setupSessionRoute = read('src/frontend/app/api/actionbridge/setup-session/route.ts');
 const verifyRoute = read('src/frontend/app/api/actionbridge/connectors/verify/route.ts');
 const capabilitiesRoute = read('src/frontend/app/api/actionbridge/capabilities/route.ts');
+const setupLinksLib = read('src/frontend/lib/actionbridge/setup-links.ts');
+for (const routeSource of [setupLinksRoute, bridgeHandshakeRoute]) {
+  if (routeSource.includes(".select('id,base_url,allowed_origins')") || routeSource.includes('base_url')) {
+    fail('setup-link origin lock route leak check', 'route handlers must use the setup-links library helper so raw connector base URLs stay out of public route modules');
+  }
+}
 for (const [label, source, marker] of [
   ['setup link route rate limit', setupLinksRoute, "policyName: 'setupLinks'"],
   ['setup session rate limit', setupSessionRoute, "policyName: 'setupSession'"],
@@ -271,6 +277,26 @@ for (const [label, source, marker] of [
 ]) {
   if (source.includes('persistActionBridgeControlAuditEvent') && source.includes(marker)) pass(`control-plane audit marker: ${label}`);
   else fail(`missing control-plane audit marker: ${label}`);
+}
+for (const token of ['verifyActionBridgeConnectorSetupTargetOriginBinding', 'actionBridgeConnectorAllowsSetupTargetOrigin', 'normalizeActionBridgeConnectorBindingOrigin', 'connector.allowed_origins', 'connector.base_url', 'if (!baseOrigin) return false', 'connectorOrigins.has(normalizedTargetOrigin)']) {
+  if (setupLinksLib.includes(token)) pass(`setup-link origin-binding helper marker: ${token}`);
+  else fail(`setup-link origin-binding helper missing marker: ${token}`);
+}
+if (setupLinksRoute.includes('verifyActionBridgeConnectorSetupTargetOriginBinding(supabase as any')
+  && setupLinksRoute.includes("bindingStatus === 'connector_not_found'")
+  && setupLinksRoute.includes("eventName: 'setup_link.denied'")
+  && setupLinksRoute.includes('ACTIONBRIDGE_SETUP_LINK_CONNECTOR_ORIGIN_MISMATCH')) {
+  pass('setup-link creation origin-locks connector binding before token issuance');
+} else {
+  fail('setup-link connector origin lock missing', 'bound setup links must reject target origins outside the connector base/allowed origins');
+}
+if (bridgeHandshakeRoute.includes('verifyActionBridgeConnectorSetupTargetOriginBinding(serviceSupabase as any')
+  && bridgeHandshakeRoute.includes("bindingStatus === 'connector_not_found'")
+  && bridgeHandshakeRoute.includes("eventName: 'bridge.handshake.denied'")
+  && bridgeHandshakeRoute.includes('ACTIONBRIDGE_BRIDGE_CONNECTOR_ORIGIN_MISMATCH')) {
+  pass('bridge handshake rechecks connector origin binding before completing setup link');
+} else {
+  fail('bridge handshake connector origin lock missing', 'legacy/mismatched setup links must not attach arbitrary origins to connectors');
 }
 if (!verifyRoute.includes('human_attestation')) pass('pilot verification disables human attestation method');
 else fail('human attestation pilot gate', 'customer pilot verification must not expose human_attestation as an active method');

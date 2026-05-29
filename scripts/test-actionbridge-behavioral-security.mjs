@@ -26,6 +26,61 @@ function validateWebhookDeliveryPath(path) {
   return { ok: true, path: normalized };
 }
 
+function isUnsafeSetupHost(hostname) {
+  const normalized = String(hostname || '').trim().toLowerCase().replace(/^\[|\]$/g, '');
+  return normalized === 'localhost'
+    || normalized.endsWith('.local')
+    || normalized.endsWith('.internal')
+    || normalized.startsWith('127.')
+    || normalized.startsWith('10.')
+    || normalized.startsWith('192.168.')
+    || /^172\.(1[6-9]|2\d|3[01])\./.test(normalized)
+    || normalized === '::1'
+    || normalized.startsWith('fc')
+    || normalized.startsWith('fd')
+    || normalized.startsWith('fe80:');
+}
+
+function normalizeActionBridgeSetupLinkOrigin(value) {
+  if (typeof value !== 'string') return null;
+  let parsedUrl;
+  try { parsedUrl = new URL(value); } catch { return null; }
+  if (parsedUrl.protocol !== 'https:') return null;
+  if (parsedUrl.username || parsedUrl.password) return null;
+  if (parsedUrl.pathname !== '/' || parsedUrl.search || parsedUrl.hash) return null;
+  if (isUnsafeSetupHost(parsedUrl.hostname)) return null;
+  return parsedUrl.origin;
+}
+
+function normalizeActionBridgeConnectorBindingOrigin(value) {
+  if (typeof value !== 'string') return null;
+  let parsedUrl;
+  try { parsedUrl = new URL(value); } catch { return null; }
+  if (parsedUrl.protocol !== 'https:') return null;
+  if (parsedUrl.username || parsedUrl.password) return null;
+  if (isUnsafeSetupHost(parsedUrl.hostname)) return null;
+  return parsedUrl.origin;
+}
+
+function actionBridgeConnectorAllowsSetupTargetOrigin(connector, targetOrigin) {
+  const normalizedTargetOrigin = normalizeActionBridgeSetupLinkOrigin(targetOrigin);
+  if (!normalizedTargetOrigin) return false;
+  const connectorOrigins = new Set();
+  const baseOrigin = normalizeActionBridgeConnectorBindingOrigin(connector.base_url ?? connector.baseUrl);
+  if (!baseOrigin) return false;
+  connectorOrigins.add(baseOrigin);
+  const allowedOrigins = Array.isArray(connector.allowed_origins)
+    ? connector.allowed_origins
+    : Array.isArray(connector.allowedOrigins)
+      ? connector.allowedOrigins
+      : [];
+  for (const allowedOrigin of allowedOrigins) {
+    const normalizedAllowedOrigin = normalizeActionBridgeConnectorBindingOrigin(allowedOrigin);
+    if (normalizedAllowedOrigin) connectorOrigins.add(normalizedAllowedOrigin);
+  }
+  return connectorOrigins.has(normalizedTargetOrigin);
+}
+
 function digestSecretRef(secretRef) {
   return crypto.createHash('sha256').update(secretRef).digest('hex').slice(0, 16).toUpperCase();
 }
@@ -136,6 +191,19 @@ for (const [label, value, expected] of [
   const actual = normalizeActionBridgeWebhookEndpointPath(value);
   if (actual === expected) pass(`endpoint path persistence behavior: ${label}`, `=> ${String(actual)}`);
   else fail(`endpoint path persistence behavior: ${label}`, `expected ${String(expected)}, got ${String(actual)}`);
+}
+
+for (const [label, connector, targetOrigin, expected] of [
+  ['connector base origin matches setup target', { base_url: 'https://customer.example/app/path?ignored=1' }, 'https://customer.example', true],
+  ['allowed origin matches setup target when base differs', { base_url: 'https://api.customer.example', allowed_origins: ['https://customer.example'] }, 'https://customer.example', true],
+  ['mismatched connector origin is rejected', { base_url: 'https://customer-a.example', allowed_origins: ['https://customer-a.example'] }, 'https://customer-b.example', false],
+  ['setup target with path is rejected fail-closed', { base_url: 'https://customer.example' }, 'https://customer.example/path', false],
+  ['http setup target is rejected fail-closed', { base_url: 'https://customer.example' }, 'http://customer.example', false],
+  ['private connector base fails closed even when allowed origin matches', { base_url: 'https://localhost', allowed_origins: ['https://customer.example'] }, 'https://customer.example', false],
+]) {
+  const actual = actionBridgeConnectorAllowsSetupTargetOrigin(connector, targetOrigin);
+  if (actual === expected) pass(`setup link origin binding behavior: ${label}`, `=> ${actual}`);
+  else fail(`setup link origin binding behavior: ${label}`, `expected ${expected}, got ${actual}`);
 }
 
 for (const [label, value, expected] of [

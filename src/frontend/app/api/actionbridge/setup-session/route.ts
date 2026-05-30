@@ -41,9 +41,40 @@ export async function GET(request: NextRequest) {
     record.status = 'opened';
   }
 
+  const [connectorResult, bridgeResult, capabilityRulesResult] = record.connector_id ? await Promise.all([
+    (serviceSupabase as any)
+      .from('actionbridge_connectors')
+      .select('id,type,enabled,safety_status,permission_status,network_execution_enabled')
+      .eq('id', record.connector_id)
+      .maybeSingle(),
+    (serviceSupabase as any)
+      .from('actionbridge_bridge_installations')
+      .select('status,last_seen_at')
+      .eq('setup_link_id', record.id)
+      .eq('target_origin', record.target_origin)
+      .maybeSingle(),
+    (serviceSupabase as any)
+      .from('actionbridge_capability_rules')
+      .select('name,enabled')
+      .eq('connector_id', record.connector_id)
+      .limit(20),
+  ]) : [{ data: null }, { data: null }, { data: [] }];
+
   return NextResponse.json({
-    setupSession: createActionBridgeSetupSessionView(record),
-    embeddedSetup: createActionBridgeEmbeddedSetupDescriptor(),
+    setupSession: createActionBridgeSetupSessionView(record, {
+      connector: connectorResult.data || null,
+      bridge: bridgeResult.data || null,
+      capabilityRules: Array.isArray(capabilityRulesResult.data) ? capabilityRulesResult.data : [],
+    }),
+    embeddedSetup: createActionBridgeEmbeddedSetupDescriptor({
+      connector: connectorResult.data ? {
+        type: connectorResult.data.type,
+        enabled: connectorResult.data.enabled,
+        safetyStatus: connectorResult.data.safety_status,
+        permissionStatus: connectorResult.data.permission_status,
+        networkExecutionEnabled: false,
+      } : undefined,
+    }),
   }, {
     headers: createActionBridgeRateLimitHeaders({ policyName: 'setupSession', remaining: rateLimit.remaining, resetAt: rateLimit.resetAt }),
   });

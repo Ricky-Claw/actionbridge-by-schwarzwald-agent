@@ -41,7 +41,14 @@ export function createActionBridgeBridgeScript(): string {
   return `(function(){
   var script=document.currentScript;
   var token=script&&script.getAttribute('data-setup-token');
-  var endpoint=(script&&script.getAttribute('data-endpoint'))||'/api/actionbridge/bridge/handshake';
+  function resolveEndpoint(){
+    var explicit=script&&script.getAttribute('data-endpoint');
+    if(explicit){return explicit;}
+    var src=script&&script.src;
+    if(src){try{return new URL('/api/actionbridge/bridge/handshake',src).toString();}catch(e){}}
+    return '/api/actionbridge/bridge/handshake';
+  }
+  var endpoint=resolveEndpoint();
   window.ActionBridge=window.ActionBridge||{status:'loading',version:'bridge.v1'};
   if(!token){window.ActionBridge.status='missing_setup_token';return;}
   fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'omit',body:JSON.stringify({token:token,origin:window.location.origin,bridgeVersion:'bridge.v1'})})

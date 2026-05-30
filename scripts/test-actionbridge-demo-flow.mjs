@@ -113,9 +113,13 @@ const setupSession = read('src/frontend/lib/actionbridge/setup-session.ts');
 const bridgeHandshake = read('src/frontend/lib/actionbridge/bridge-handshake.ts');
 if (setupSession.includes('data-setup-token')) pass('Setup session snippet passes setup token to bridge script');
 else fail('Setup session snippet must use data-setup-token; bridge script cannot handshake with data-site-id');
+if (setupSession.includes('data-endpoint="https://actionbridge.schwarzwald-agent.de/api/actionbridge/bridge/handshake"')) pass('Setup session snippet pins bridge handshake endpoint to ActionBridge origin');
+else fail('Setup session snippet must include absolute ActionBridge handshake endpoint for customer-site embeds');
 
 if (bridgeHandshake.includes("getAttribute('data-setup-token')")) pass('Bridge script reads data-setup-token');
 else fail('Bridge script must read data-setup-token');
+if (bridgeHandshake.includes("new URL('/api/actionbridge/bridge/handshake',src).toString()")) pass('Bridge script derives same ActionBridge API origin from script src');
+else fail('Bridge script must not default customer-site embeds to the customer origin API path');
 
 for (const forbidden of ['data-site-id', 'localStorage', 'document.cookie', 'querySelectorAll', 'submit()']) {
   if (bridgeHandshake.includes(forbidden)) fail(`Bridge script contains forbidden demo behavior: ${forbidden}`);

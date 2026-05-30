@@ -189,7 +189,7 @@ if (!process.exitCode) {
   if (!process.exitCode) pass('ActionBridge capability rules define safe read/draft capabilities');
 
   const bridgeHandshake = read('src/frontend/lib/actionbridge/bridge-handshake.ts');
-  for (const token of ['parseActionBridgeBridgeHandshake', 'createActionBridgeBridgeScript', 'normalizeActionBridgeHandshakeOrigin', 'credentials:\'omit\'', 'window.ActionBridge', 'data-setup-token']) {
+  for (const token of ['parseActionBridgeBridgeHandshake', 'createActionBridgeBridgeScript', 'normalizeActionBridgeHandshakeOrigin', 'credentials:\'omit\'', 'window.ActionBridge', 'data-setup-token', 'data-endpoint', "new URL('/api/actionbridge/bridge/handshake',src).toString()"]) {
     if (!bridgeHandshake.includes(token)) fail(`bridge-handshake.ts missing ${token}`);
   }
   if (bridgeHandshake.includes('secret_ref') || bridgeHandshake.includes('form.submit') || bridgeHandshake.includes('querySelectorAll')) fail('bridge handshake/script v1 must not expose secrets, submit forms, or scrape DOM');
@@ -455,7 +455,7 @@ if (!process.exitCode) {
     if (!setupSessionVerificationRoute.includes(token)) fail(`setup-session verification route missing ${token}`);
   }
   if (setupSessionVerificationRoute.includes('auth.getUser')) fail('setup-session verification must be setup-token scoped, not browser-auth scoped');
-  for (const token of ['parseActionBridgeBridgeHandshake', 'actionbridge_setup_links', 'actionbridge_bridge_installations', 'originHeader && originHeader !== parsed.origin', 'connected_only']) {
+  for (const token of ['parseActionBridgeBridgeHandshake', 'actionbridge_setup_links', 'actionbridge_bridge_installations', 'originHeader && originHeader !== parsed.origin', 'connected_only', 'Access-Control-Allow-Origin', 'Access-Control-Allow-Methods', 'OPTIONS']) {
     if (!bridgeHandshakeRoute.includes(token)) fail(`bridge handshake route missing ${token}`);
   }
   if (bridgeHandshakeRoute.includes('secret_ref') || bridgeHandshakeRoute.includes('base_url')) fail('bridge handshake route must not select secrets or connector base URLs');

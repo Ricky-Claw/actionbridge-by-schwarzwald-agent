@@ -126,7 +126,7 @@ export function createActionBridgeSetupSessionView(record: ActionBridgeSetupSess
     })),
     bridgeInstall: {
       mode: bridgeConnected ? 'connected_only' : 'script_pending',
-      snippet: `<script src="https://actionbridge.schwarzwald-agent.de/actionbridge/bridge.js" data-setup-token="SETUP_TOKEN_SHOWN_ONCE" async></script>`,
+      snippet: `<script src="https://actionbridge.schwarzwald-agent.de/actionbridge/bridge.js" data-endpoint="https://actionbridge.schwarzwald-agent.de/api/actionbridge/bridge/handshake" data-setup-token="SETUP_TOKEN_SHOWN_ONCE" async></script>`,
       status: bridgeStatus,
       lastSeenAt: bridge?.last_seen_at || null,
     },

@@ -2,14 +2,44 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createCoreServiceClient } from '@/lib/core/service-client';
-import { parseActionBridgeBridgeHandshake } from '@/lib/actionbridge/bridge-handshake';
+import { normalizeActionBridgeHandshakeOrigin, parseActionBridgeBridgeHandshake } from '@/lib/actionbridge/bridge-handshake';
 import { verifyActionBridgeConnectorSetupTargetOriginBinding } from '@/lib/actionbridge/setup-links';
 import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
 import { createActionBridgeRateLimitHeaders, enforceActionBridgeRateLimitAsync } from '@/lib/actionbridge/rate-limit';
 
+function createActionBridgeBridgeCorsHeaders(request: NextRequest): Record<string, string> {
+  const origin = normalizeActionBridgeHandshakeOrigin(request.headers.get('origin') || '');
+  if (!origin) return {};
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Max-Age': '300',
+    Vary: 'Origin',
+  };
+}
+
+function withActionBridgeBridgeCors(response: NextResponse, corsHeaders: Record<string, string>): NextResponse {
+  for (const [key, value] of Object.entries(corsHeaders)) response.headers.set(key, value);
+  return response;
+}
+
+function bridgeHandshakeJson(body: Record<string, unknown>, init: ResponseInit, corsHeaders: Record<string, string>) {
+  return NextResponse.json(body, { ...init, headers: { ...corsHeaders, ...(init.headers || {}) } });
+}
+
+export async function OPTIONS(request: NextRequest) {
+  const corsHeaders = createActionBridgeBridgeCorsHeaders(request);
+  if (!corsHeaders['Access-Control-Allow-Origin']) {
+    return NextResponse.json({ error: 'INVALID_ACTIONBRIDGE_BRIDGE_ORIGIN' }, { status: 403 });
+  }
+  return new NextResponse(null, { status: 204, headers: corsHeaders });
+}
+
 export async function POST(request: NextRequest) {
+  const corsHeaders = createActionBridgeBridgeCorsHeaders(request);
   const rateLimit = await enforceActionBridgeRateLimitAsync({ request, policyName: 'bridgeHandshake' });
-  if (!rateLimit.ok) return rateLimit.response!;
+  if (!rateLimit.ok) return withActionBridgeBridgeCors(rateLimit.response!, corsHeaders);
 
   const body = await request.json().catch(() => ({}));
   const originHeader = request.headers.get('origin') || '';
@@ -19,21 +49,21 @@ export async function POST(request: NextRequest) {
     bridgeVersion: body.bridgeVersion,
   });
   if (!parsed || (originHeader && originHeader !== parsed.origin)) {
-    return NextResponse.json({ error: 'INVALID_ACTIONBRIDGE_BRIDGE_HANDSHAKE' }, { status: 400 });
+    return bridgeHandshakeJson({ error: 'INVALID_ACTIONBRIDGE_BRIDGE_HANDSHAKE' }, { status: 400 }, corsHeaders);
   }
 
   const serviceSupabase = createCoreServiceClient();
-  if (!serviceSupabase) return NextResponse.json({ error: 'ACTIONBRIDGE_BRIDGE_HANDSHAKE_UNAVAILABLE' }, { status: 503 });
+  if (!serviceSupabase) return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_BRIDGE_HANDSHAKE_UNAVAILABLE' }, { status: 503 }, corsHeaders);
 
   const { data: setupLink } = await (serviceSupabase as any)
     .from('actionbridge_setup_links')
     .select('id,user_id,connector_id,target_origin,status,expires_at')
     .eq('token_digest', parsed.tokenDigest)
     .maybeSingle();
-  if (!setupLink) return NextResponse.json({ error: 'ACTIONBRIDGE_SETUP_LINK_NOT_FOUND' }, { status: 404 });
-  if (setupLink.target_origin !== parsed.origin) return NextResponse.json({ error: 'ACTIONBRIDGE_BRIDGE_ORIGIN_MISMATCH' }, { status: 403 });
+  if (!setupLink) return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_SETUP_LINK_NOT_FOUND' }, { status: 404 }, corsHeaders);
+  if (setupLink.target_origin !== parsed.origin) return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_BRIDGE_ORIGIN_MISMATCH' }, { status: 403 }, corsHeaders);
   if (!['pending', 'opened'].includes(setupLink.status) || new Date(setupLink.expires_at).getTime() < Date.now()) {
-    return NextResponse.json({ error: 'ACTIONBRIDGE_SETUP_LINK_EXPIRED_OR_REVOKED' }, { status: 409 });
+    return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_SETUP_LINK_EXPIRED_OR_REVOKED' }, { status: 409 }, corsHeaders);
   }
 
   if (setupLink.connector_id) {
@@ -43,7 +73,7 @@ export async function POST(request: NextRequest) {
       targetOrigin: setupLink.target_origin,
     });
     if (bindingStatus === 'connector_not_found') {
-      return NextResponse.json({ error: 'ACTIONBRIDGE_BRIDGE_CONNECTOR_BINDING_NOT_FOUND' }, { status: 409 });
+      return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_BRIDGE_CONNECTOR_BINDING_NOT_FOUND' }, { status: 409 }, corsHeaders);
     }
     if (bindingStatus !== 'matched') {
       await persistActionBridgeControlAuditEvent(serviceSupabase, {
@@ -54,7 +84,7 @@ export async function POST(request: NextRequest) {
         status: 'denied',
         resultSummary: { reason: 'ACTIONBRIDGE_BRIDGE_CONNECTOR_ORIGIN_MISMATCH' },
       });
-      return NextResponse.json({ error: 'ACTIONBRIDGE_BRIDGE_CONNECTOR_ORIGIN_MISMATCH' }, { status: 409 });
+      return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_BRIDGE_CONNECTOR_ORIGIN_MISMATCH' }, { status: 409 }, corsHeaders);
     }
   }
 
@@ -66,7 +96,7 @@ export async function POST(request: NextRequest) {
     .eq('target_origin', parsed.origin)
     .maybeSingle();
   if (existingInstallation?.status === 'revoked') {
-    return NextResponse.json({ error: 'ACTIONBRIDGE_BRIDGE_INSTALLATION_REVOKED' }, { status: 409 });
+    return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_BRIDGE_INSTALLATION_REVOKED' }, { status: 409 }, corsHeaders);
   }
 
   const { data, error } = await (serviceSupabase as any)
@@ -82,7 +112,7 @@ export async function POST(request: NextRequest) {
     }, { onConflict: 'setup_link_id,target_origin' })
     .select('id,target_origin,bridge_version,status,last_seen_at')
     .single();
-  if (error || !data) return NextResponse.json({ error: 'ACTIONBRIDGE_BRIDGE_HANDSHAKE_FAILED' }, { status: 409 });
+  if (error || !data) return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_BRIDGE_HANDSHAKE_FAILED' }, { status: 409 }, corsHeaders);
 
   await (serviceSupabase as any)
     .from('actionbridge_setup_links')
@@ -99,7 +129,7 @@ export async function POST(request: NextRequest) {
     resultSummary: { bridgeInstallationId: data.id, setupLinkStatus: 'completed', mode: 'connected_only' },
   });
 
-  return NextResponse.json({
+  return bridgeHandshakeJson({
     bridge: {
       id: data.id,
       origin: data.target_origin,
@@ -110,5 +140,5 @@ export async function POST(request: NextRequest) {
     },
   }, {
     headers: createActionBridgeRateLimitHeaders({ policyName: 'bridgeHandshake', remaining: rateLimit.remaining, resetAt: rateLimit.resetAt }),
-  });
+  }, corsHeaders);
 }

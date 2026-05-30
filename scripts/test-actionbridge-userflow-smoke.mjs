@@ -50,6 +50,10 @@ const routes = [
     path: '/actionbridge/targets',
     mustContain: ['Target', 'ActionBridge'],
   },
+  {
+    path: '/actionbridge/bridge.js',
+    mustContain: ['data-setup-token', 'data-endpoint', "new URL('/api/actionbridge/bridge/handshake',src).toString()"],
+  },
 ];
 
 const forbiddenPatterns = [
@@ -129,12 +133,35 @@ async function run() {
       }
     }
 
+    const preflight = await fetch(`${baseUrl}/api/actionbridge/bridge/handshake`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://customer-smoke.example',
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'content-type',
+      },
+    });
+    if (preflight.status !== 204) fail(`bridge handshake CORS preflight returned HTTP ${preflight.status}`);
+    if (preflight.headers.get('access-control-allow-origin') !== 'https://customer-smoke.example') fail('bridge handshake CORS preflight did not echo normalized HTTPS origin');
+    if (!preflight.headers.get('access-control-allow-methods')?.includes('POST')) fail('bridge handshake CORS preflight does not allow POST');
+
+    const deniedPost = await fetch(`${baseUrl}/api/actionbridge/bridge/handshake`, {
+      method: 'POST',
+      headers: {
+        Origin: 'https://customer-smoke.example',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ token: 'invalid-token', origin: 'https://customer-smoke.example', bridgeVersion: 'bridge.v1' }),
+    });
+    if (deniedPost.status !== 400) fail(`bridge handshake invalid-token POST returned HTTP ${deniedPost.status}`);
+    if (deniedPost.headers.get('access-control-allow-origin') !== 'https://customer-smoke.example') fail('bridge handshake denied POST did not keep CORS header for customer-site embeds');
+
     if (process.exitCode) {
       console.error('ActionBridge userflow smoke failed.');
       return;
     }
 
-    console.log(`✅ ActionBridge userflow smoke passed for ${routes.length} routes on ${baseUrl}`);
+    console.log(`✅ ActionBridge userflow smoke passed for ${routes.length} routes plus bridge handshake CORS on ${baseUrl}`);
   } finally {
     if (child.pid) {
       try {

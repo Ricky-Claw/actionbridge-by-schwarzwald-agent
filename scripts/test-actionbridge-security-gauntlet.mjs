@@ -317,6 +317,26 @@ const persistenceSource = read('src/frontend/lib/actionbridge/persistence.ts');
 if (persistenceSource.includes('networkExecution?: boolean') && persistenceSource.includes('networkExecution: Boolean(input.networkExecution)')) pass('control-plane audit can record real network probe semantics');
 else fail('control-plane audit network semantics', 'domain verification probes must not be forced to networkExecution:false');
 
+const domainVerification = read('src/frontend/lib/actionbridge/domain-verification.ts');
+for (const [label, pattern] of [
+  ['domain verification HTTP does not use fetch after DNS validation', /Do not use the global Fetch API[\s\S]*DNS rebinding SSRF risk/],
+  ['domain verification uses bounded DNS timeout before HTTP', /lookupActionBridgeVerificationAddresses[\s\S]*ACTIONBRIDGE_DOMAIN_VERIFICATION_DNS_TIMEOUT_MS[\s\S]*ACTIONBRIDGE_DOMAIN_VERIFICATION_DNS_TIMEOUT/],
+  ['domain verification uses bounded DNS TXT timeout', /resolveActionBridgeVerificationTxt[\s\S]*ACTIONBRIDGE_DOMAIN_VERIFICATION_DNS_TXT_TIMEOUT_MS[\s\S]*ACTIONBRIDGE_DOMAIN_VERIFICATION_DNS_TXT_TIMEOUT[\s\S]*dns_txt_lookup_timeout/],
+  ['domain verification validates all resolver answers before pinned connect', /addresses\.map\(\(entry\) => \(\{ address: entry\.address, family: entry\.family === 6 \? 6 : 4 \}\)\)[\s\S]*if \(!dnsDecision\.ok\)[\s\S]*const pinnedAddress = addresses\[0\]\?\.address/],
+  ['domain verification connects to pinned IP while preserving original Host and SNI', /host: input\.pinnedAddress[\s\S]*servername: input\.target\.hostname[\s\S]*agent: false[\s\S]*Host: input\.target\.host[\s\S]*getPinnedActionBridgeVerificationText\(\{/],
+  ['domain verification has a hard total HTTP deadline plus socket timeout', /timeoutState\.deadline = setTimeout\(\(\) => request\.destroy\(new Error\('ACTIONBRIDGE_DOMAIN_VERIFICATION_TIMEOUT'\)\), input\.timeoutMs\)[\s\S]*request\.on\('timeout'/],
+  ['domain verification blocks redirects without following or draining them', /status >= 300 && status < 400[\s\S]*redirectBlocked: true[\s\S]*response\.destroy\(\)[\s\S]*request\.destroy\(\)[\s\S]*response\.redirectBlocked/],
+  ['domain verification streams with byte cap before matcher parsing', /bytes > input\.maxBytes[\s\S]*tooLarge: true[\s\S]*request\.destroy\(\)[\s\S]*defaultActionBridgeResponseLimitPolicy\.maxBytes/],
+]) {
+  if (pattern.test(domainVerification)) pass(`domain verification pinned HTTPS behavior: ${label}`);
+  else fail(`domain verification pinned HTTPS behavior missing: ${label}`);
+}
+if (domainVerification.includes('fetch(')) fail('domain verification HTTP guard', 'verification HTTP checks must not re-resolve with fetch');
+for (const token of ['dnsLookupAttempted: true', 'httpRequestAttempted: false', 'httpRequestAttempted: true', 'http_probe_timeout']) {
+  if (domainVerification.includes(token)) pass(`domain verification audit evidence marker: ${token}`);
+  else fail(`domain verification audit evidence marker missing: ${token}`);
+}
+
 const onboardingAuditMigration = read('supabase/migrations/20260515000100_actionbridge_onboarding_audit_triggers.sql');
 if (onboardingAuditMigration.includes('audit_actionbridge_setup_link_status_change') && onboardingAuditMigration.includes("'setup_link.' || NEW.status")) pass('setup link status changes are audited by DB trigger');
 else fail('setup link status audit trigger missing', 'opened/completed/revoked/expired setup transitions need immutable audit');

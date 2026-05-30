@@ -210,11 +210,12 @@ if (!process.exitCode) {
   if (!process.exitCode) pass('ActionBridge setup links generate digest-only customer setup tokens');
 
   const domainVerification = read('src/frontend/lib/actionbridge/domain-verification.ts');
-  for (const token of ['createActionBridgeVerificationChallenge', 'verifyActionBridgeDomainChallenge', 'human_attestation', 'well_known', 'meta_tag', 'dns_txt', 'actionbridge-verification=', 'dns.resolveTxt', 'dns.lookup', 'decideActionBridgeDnsPinning', 'enforceActionBridgeResponseByteLimit', 'redirect: \'manual\'', 'AbortSignal.timeout']) {
+  for (const token of ['createActionBridgeVerificationChallenge', 'verifyActionBridgeDomainChallenge', 'human_attestation', 'well_known', 'meta_tag', 'dns_txt', 'actionbridge-verification=', 'dns.resolveTxt', 'resolveActionBridgeVerificationTxt', 'ACTIONBRIDGE_DOMAIN_VERIFICATION_DNS_TXT_TIMEOUT', 'dns.lookup', 'lookupActionBridgeVerificationAddresses', 'ACTIONBRIDGE_DOMAIN_VERIFICATION_DNS_TIMEOUT', 'https.request', "method: 'GET'", 'pinnedAddress', 'servername: input.target.hostname', 'agent: false', 'Host: input.target.host', 'decideActionBridgeDnsPinning', 'defaultActionBridgeResponseLimitPolicy.maxBytes', 'enforceActionBridgeResponseByteLimit', 'redirectBlocked', 'dnsLookupAttempted', 'httpRequestAttempted']) {
     if (!domainVerification.includes(token)) fail(`domain-verification.ts missing ${token}`);
   }
+  if (domainVerification.includes('fetch(')) fail('domain verification HTTP checks must use pinned HTTPS, not fetch re-resolution');
   if (!domainVerification.includes('isPrivateActionBridgeHost')) fail('domain verification must reject private/internal origins');
-  if (!process.exitCode) pass('ActionBridge domain verification supports attestation, well-known, meta tag, and DNS TXT');
+  if (!process.exitCode) pass('ActionBridge domain verification supports attestation, well-known, meta tag, DNS TXT, and pinned HTTPS checks');
 
   const multiTargetRegistry = read('src/frontend/lib/actionbridge/multi-target-registry.ts');
   for (const token of ['ACTIONBRIDGE_ARCHIPEL_PILOT_URLS', 'https://bridge.schwarzwald-agent.de', 'createActionBridgeTargetsFromUrls', 'filterActionBridgeTargetsForTenant', 'createActionBridgeTargetToolCatalog', 'actionbridge.targets.list', 'actionbridge.target.status', 'networkExecution: false']) {

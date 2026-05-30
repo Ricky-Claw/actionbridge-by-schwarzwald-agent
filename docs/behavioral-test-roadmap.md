@@ -8,6 +8,7 @@ Current gates are strong contract/security marker tests, but production needs be
 - `test:behavioral-security`: spec-model checks for endpoint paths, signing modes, and failure persistence semantics.
 - `test:behavioral-modules`: extracts and executes importable/source-level ActionBridge seams where build metadata is unavailable, starting with real `normalizeActionBridgeWebhookEndpointPath(...)` behavior from the connector route.
 - `test:secret-manager-live-probe-route`: executable route-core tests for the managed-secret live-probe path with mocked auth Supabase, service audit client, rate limiter, provider probe, and audit persistence. It covers unauthenticated/missing/not-found/non-HMAC/service-unavailable/rate-limited/audit-failed/success/provider-denied branches plus negative assertions that raw secret refs, tokens, signing secrets, and provider resource names do not reach response or audit summaries.
+- `test:setup-domain-verification`: executable mocked DNS/HTTPS tests for setup-session domain verification. It covers mixed public/private DNS fail-closed before HTTP, pinned HTTPS Host/SNI preservation, redirect aborts, response byte-cap aborts, slowloris/hard HTTP deadline behavior, DNS lookup timeouts, and DNS TXT lookup timeouts.
 
 These gates improve coverage but do not replace full deployed Next/Supabase integration tests.
 
@@ -29,7 +30,7 @@ Expected proof:
 
 ## Priority 2 — Webhook Delivery Failure Semantics
 Behavioral cases:
-- DNS private address returns blocked before network.
+- DNS private address returns blocked before network. **Webhook-v1 covered by `test:behavioral-modules`; setup-session domain verification covered by `test:setup-domain-verification`.**
 - timeout/connection error creates failed execution + error log.
 - non-2xx response creates failed execution + error log.
 - unresolved signing secret ref blocks before network.

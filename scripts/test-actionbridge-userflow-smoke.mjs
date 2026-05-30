@@ -145,6 +145,35 @@ async function run() {
     if (preflight.headers.get('access-control-allow-origin') !== 'https://customer-smoke.example') fail('bridge handshake CORS preflight did not echo normalized HTTPS origin');
     if (!preflight.headers.get('access-control-allow-methods')?.includes('POST')) fail('bridge handshake CORS preflight does not allow POST');
 
+    const invalidPreflight = await fetch(`${baseUrl}/api/actionbridge/bridge/handshake`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'http://127.0.0.1:3000',
+        'Access-Control-Request-Method': 'POST',
+      },
+    });
+    if (invalidPreflight.status !== 403) fail(`bridge handshake invalid-Origin preflight returned HTTP ${invalidPreflight.status}`);
+    if (invalidPreflight.headers.get('access-control-allow-origin')) fail('bridge handshake invalid-Origin preflight must not emit CORS allow-origin');
+
+    const missingOriginPost = await fetch(`${baseUrl}/api/actionbridge/bridge/handshake`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: 'absl_123456789012', origin: 'https://customer-smoke.example', bridgeVersion: 'bridge.v1' }),
+    });
+    if (missingOriginPost.status !== 403) fail(`bridge handshake missing-Origin POST returned HTTP ${missingOriginPost.status}`);
+    if (missingOriginPost.headers.get('access-control-allow-origin')) fail('bridge handshake missing-Origin POST must not emit CORS allow-origin');
+
+    const mismatchedOriginPost = await fetch(`${baseUrl}/api/actionbridge/bridge/handshake`, {
+      method: 'POST',
+      headers: {
+        Origin: 'https://customer-smoke.example',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ token: 'absl_123456789012', origin: 'https://other-customer-smoke.example', bridgeVersion: 'bridge.v1' }),
+    });
+    if (mismatchedOriginPost.status !== 400) fail(`bridge handshake Origin/body mismatch POST returned HTTP ${mismatchedOriginPost.status}`);
+    if (mismatchedOriginPost.headers.get('access-control-allow-origin') !== 'https://customer-smoke.example') fail('bridge handshake Origin/body mismatch must keep CORS for the requesting customer origin');
+
     const deniedPost = await fetch(`${baseUrl}/api/actionbridge/bridge/handshake`, {
       method: 'POST',
       headers: {
@@ -155,6 +184,22 @@ async function run() {
     });
     if (deniedPost.status !== 400) fail(`bridge handshake invalid-token POST returned HTTP ${deniedPost.status}`);
     if (deniedPost.headers.get('access-control-allow-origin') !== 'https://customer-smoke.example') fail('bridge handshake denied POST did not keep CORS header for customer-site embeds');
+
+    let rateLimitPost = null;
+    for (let i = 0; i < 21; i += 1) {
+      rateLimitPost = await fetch(`${baseUrl}/api/actionbridge/bridge/handshake`, {
+        method: 'POST',
+        headers: {
+          Origin: 'https://customer-smoke.example',
+          'Content-Type': 'application/json',
+          'User-Agent': 'actionbridge-rate-limit-cors-smoke',
+        },
+        body: JSON.stringify({ token: 'invalid-token', origin: 'https://customer-smoke.example', bridgeVersion: 'bridge.v1' }),
+      });
+    }
+    if (rateLimitPost?.status !== 429) fail(`bridge handshake rate-limit POST returned HTTP ${rateLimitPost?.status}`);
+    if (rateLimitPost?.headers.get('access-control-allow-origin') !== 'https://customer-smoke.example') fail('bridge handshake rate-limit denial did not keep CORS header for customer-site embeds');
+    if (rateLimitPost && !rateLimitPost.headers.get('retry-after')) fail('bridge handshake rate-limit denial omitted Retry-After');
 
     if (process.exitCode) {
       console.error('ActionBridge userflow smoke failed.');

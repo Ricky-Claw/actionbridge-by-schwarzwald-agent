@@ -455,7 +455,7 @@ if (!process.exitCode) {
     if (!setupSessionVerificationRoute.includes(token)) fail(`setup-session verification route missing ${token}`);
   }
   if (setupSessionVerificationRoute.includes('auth.getUser')) fail('setup-session verification must be setup-token scoped, not browser-auth scoped');
-  for (const token of ['parseActionBridgeBridgeHandshake', 'actionbridge_setup_links', 'actionbridge_bridge_installations', 'originHeader && originHeader !== parsed.origin', 'connected_only', 'Access-Control-Allow-Origin', 'Access-Control-Allow-Methods', 'OPTIONS']) {
+  for (const token of ['parseActionBridgeBridgeHandshake', 'actionbridge_setup_links', 'actionbridge_bridge_installations', 'getActionBridgeBridgeOriginHeader', '!originHeader', 'parsed.origin !== originHeader', 'connected_only', 'Access-Control-Allow-Origin', 'Access-Control-Allow-Methods', 'OPTIONS']) {
     if (!bridgeHandshakeRoute.includes(token)) fail(`bridge handshake route missing ${token}`);
   }
   if (bridgeHandshakeRoute.includes('secret_ref') || bridgeHandshakeRoute.includes('base_url')) fail('bridge handshake route must not select secrets or connector base URLs');

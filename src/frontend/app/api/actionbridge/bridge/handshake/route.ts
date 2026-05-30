@@ -7,8 +7,12 @@ import { verifyActionBridgeConnectorSetupTargetOriginBinding } from '@/lib/actio
 import { persistActionBridgeControlAuditEvent } from '@/lib/actionbridge/persistence';
 import { createActionBridgeRateLimitHeaders, enforceActionBridgeRateLimitAsync } from '@/lib/actionbridge/rate-limit';
 
+function getActionBridgeBridgeOriginHeader(request: NextRequest): string | null {
+  return normalizeActionBridgeHandshakeOrigin(request.headers.get('origin') || '');
+}
+
 function createActionBridgeBridgeCorsHeaders(request: NextRequest): Record<string, string> {
-  const origin = normalizeActionBridgeHandshakeOrigin(request.headers.get('origin') || '');
+  const origin = getActionBridgeBridgeOriginHeader(request);
   if (!origin) return {};
   return {
     'Access-Control-Allow-Origin': origin,
@@ -38,17 +42,20 @@ export async function OPTIONS(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const corsHeaders = createActionBridgeBridgeCorsHeaders(request);
+  const originHeader = getActionBridgeBridgeOriginHeader(request);
   const rateLimit = await enforceActionBridgeRateLimitAsync({ request, policyName: 'bridgeHandshake' });
   if (!rateLimit.ok) return withActionBridgeBridgeCors(rateLimit.response!, corsHeaders);
+  if (!originHeader) {
+    return bridgeHandshakeJson({ error: 'INVALID_ACTIONBRIDGE_BRIDGE_ORIGIN' }, { status: 403 }, corsHeaders);
+  }
 
   const body = await request.json().catch(() => ({}));
-  const originHeader = request.headers.get('origin') || '';
   const parsed = parseActionBridgeBridgeHandshake({
     token: body.token,
     origin: body.origin || originHeader,
     bridgeVersion: body.bridgeVersion,
   });
-  if (!parsed || (originHeader && originHeader !== parsed.origin)) {
+  if (!parsed || parsed.origin !== originHeader) {
     return bridgeHandshakeJson({ error: 'INVALID_ACTIONBRIDGE_BRIDGE_HANDSHAKE' }, { status: 400 }, corsHeaders);
   }
 

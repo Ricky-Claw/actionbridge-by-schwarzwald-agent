@@ -287,10 +287,13 @@ else {
 if (!exists('docs/actionbridge-pilot-runbook.md')) fail('Missing ActionBridge pilot runbook');
 else {
   const runbook = read('docs/actionbridge-pilot-runbook.md');
-  for (const token of ['Main Flow', 'Revoke / Kill-Switch', 'Verification Checklist', 'Pilot Exit Criteria', 'Do not integrate into Schwarzwald-Agent dashboard until ActionBridge standalone DoD is satisfied']) {
+  for (const token of ['Main Flow', 'Revoke / Kill-Switch', 'Verification Checklist', 'Pilot Exit Criteria', 'npm run check', 'test:userflow-smoke', 'ACTIONBRIDGE_PUBLIC_BASE_URL', 'Webhook-v1 Signing and Rotation Mode', 'sentinel.actionbridge.webhook_signing_secret.rotate.v1', 'Managed Secret Manager/KMS Evidence Gate', 'Do not integrate into Schwarzwald-Agent dashboard until ActionBridge standalone DoD is satisfied']) {
     if (!runbook.includes(token)) fail(`pilot runbook missing ${token}`);
   }
-  if (!process.exitCode) pass('ActionBridge pilot runbook documents standalone setup, verification, approval, execution, and exit gates');
+  for (const staleToken of ['Production/broad rollout remains blocked until server-side secret-reference signing and behavioral security tests are implemented', 'After standalone pilot succeeds, implement the first reviewed external connector adapter']) {
+    if (runbook.includes(staleToken)) fail(`pilot runbook still contains stale production-gate wording: ${staleToken}`);
+  }
+  if (!process.exitCode) pass('ActionBridge pilot runbook documents current standalone setup, signing, verification, approval, execution, and production-evidence gates');
 }
 
 if (!exists('docs/specs/actionbridge-webhook-v1-adapter.md')) fail('Missing Webhook-v1 adapter spec');

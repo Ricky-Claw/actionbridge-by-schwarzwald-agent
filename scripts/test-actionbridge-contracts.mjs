@@ -305,10 +305,13 @@ else {
 if (!exists('docs/build-and-verification-gates.md')) fail('Missing build and verification gates doc');
 else {
   const gates = read('docs/build-and-verification-gates.md');
-  for (const token of ['npm test', 'git diff --check', 'Not Yet Available', 'tsconfig.json', 'npm run build', 'Autopilot Rule']) {
+  for (const token of ['npm run check', 'npm test', 'git diff --check', 'test:userflow-smoke', 'test:setup-domain-verification', 'test:secret-manager-live-probe-route', 'tsconfig.json', 'npm run build', 'Production Proof Gaps', 'Autopilot Rule']) {
     if (!gates.includes(token)) fail(`build gates doc missing ${token}`);
   }
-  if (!process.exitCode) pass('Build/verification gate doc defines current and production checks');
+  for (const staleToken of ['Not Yet Available', 'Before production release, add at least one browser/userflow smoke test']) {
+    if (gates.includes(staleToken)) fail(`build gates doc still contains stale gate wording: ${staleToken}`);
+  }
+  if (!process.exitCode) pass('Build/verification gate doc defines current local gates and remaining production proof gaps');
 }
 
 if (!exists('docs/actionbridge-scope-plan.md')) fail('Missing ActionBridge scope plan');

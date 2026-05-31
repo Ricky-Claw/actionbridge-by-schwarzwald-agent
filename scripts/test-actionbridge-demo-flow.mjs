@@ -113,8 +113,8 @@ const setupSession = read('src/frontend/lib/actionbridge/setup-session.ts');
 const bridgeHandshake = read('src/frontend/lib/actionbridge/bridge-handshake.ts');
 if (setupSession.includes('data-setup-token')) pass('Setup session snippet passes setup token to bridge script');
 else fail('Setup session snippet must use data-setup-token; bridge script cannot handshake with data-site-id');
-if (setupSession.includes('data-endpoint="https://actionbridge.schwarzwald-agent.de/api/actionbridge/bridge/handshake"')) pass('Setup session snippet pins bridge handshake endpoint to ActionBridge origin');
-else fail('Setup session snippet must include absolute ActionBridge handshake endpoint for customer-site embeds');
+if (setupSession.includes('resolveActionBridgeSetupBridgePublicOrigin') && setupSession.includes('ACTIONBRIDGE_PUBLIC_BASE_URL') && setupSession.includes('data-endpoint="${bridgePublicOrigin}/api/actionbridge/bridge/handshake"')) pass('Setup session snippet pins bridge handshake endpoint to configured ActionBridge public origin');
+else fail('Setup session snippet must include absolute configured ActionBridge handshake endpoint for customer-site embeds');
 
 if (bridgeHandshake.includes("getAttribute('data-setup-token')")) pass('Bridge script reads data-setup-token');
 else fail('Bridge script must read data-setup-token');

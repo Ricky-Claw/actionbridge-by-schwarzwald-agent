@@ -49,7 +49,7 @@ These gates verify the standalone ActionBridge product contract, security guardr
 The local gates are controlled-pilot gates, not broad-production approval. Production release still needs externally gathered evidence from the approved deployed environment:
 - managed Secret Manager/KMS provisioning with least-privilege runtime identity/token issuance;
 - live secret-manager probe evidence with `auditPersisted: true` and a matching redacted audit row;
-- deployed staging setup → verification → bridge/adapter → capability → tool-catalog → approval → Webhook-v1 delivery smoke;
+- deployed staging setup → verification → bridge/adapter → capability → tool-catalog → approval → Webhook-v1 delivery smoke, with `ACTIONBRIDGE_PUBLIC_BASE_URL` pinned to the exact staging ActionBridge HTTPS origin;
 - deployed SSRF/DNS/rebinding and pinned-connection tests against controlled staging domains;
 - distributed production rate-limit configuration evidence;
 - final Sentinel release review with no open Critical/High findings.

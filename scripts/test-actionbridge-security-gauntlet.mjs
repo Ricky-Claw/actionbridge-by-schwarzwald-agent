@@ -252,6 +252,7 @@ const setupSessionVerificationRoute = read('src/frontend/app/api/actionbridge/se
 const verifyRoute = read('src/frontend/app/api/actionbridge/connectors/verify/route.ts');
 const capabilitiesRoute = read('src/frontend/app/api/actionbridge/capabilities/route.ts');
 const setupLinksLib = read('src/frontend/lib/actionbridge/setup-links.ts');
+const setupSessionLib = read('src/frontend/lib/actionbridge/setup-session.ts');
 for (const routeSource of [setupLinksRoute, bridgeHandshakeRoute]) {
   if (routeSource.includes(".select('id,base_url,allowed_origins')") || routeSource.includes('base_url')) {
     fail('setup-link origin lock route leak check', 'route handlers must use the setup-links library helper so raw connector base URLs stay out of public route modules');
@@ -285,6 +286,15 @@ for (const [label, source, marker] of [
 for (const token of ['verifyActionBridgeConnectorSetupTargetOriginBinding', 'actionBridgeConnectorAllowsSetupTargetOrigin', 'normalizeActionBridgeConnectorBindingOrigin', 'connector.allowed_origins', 'connector.base_url', 'if (!baseOrigin) return false', 'connectorOrigins.has(normalizedTargetOrigin)']) {
   if (setupLinksLib.includes(token)) pass(`setup-link origin-binding helper marker: ${token}`);
   else fail(`setup-link origin-binding helper missing marker: ${token}`);
+}
+for (const token of ['normalizeActionBridgeSetupBridgePublicOrigin', 'resolveActionBridgeSetupBridgePublicOrigin', 'ACTIONBRIDGE_PUBLIC_BASE_URL', 'trimmedValue !== value', '/^https:\\/\\//.test(trimmedValue)', 'isPrivateActionBridgeHost(parsedUrl.hostname)', 'allowLocalHttp: process.env.NODE_ENV !== \'production\'', 'data-endpoint="${bridgePublicOrigin}/api/actionbridge/bridge/handshake"']) {
+  if (setupSessionLib.includes(token)) pass(`setup bridge public-origin helper marker: ${token}`);
+  else fail(`setup bridge public-origin helper missing marker: ${token}`);
+}
+if (setupSessionRoute.includes('resolveActionBridgeSetupBridgePublicOrigin(new URL(request.url).origin)') && setupSessionRoute.includes('bridgePublicOrigin')) {
+  pass('setup-session route injects configured bridge public origin into customer snippet');
+} else {
+  fail('setup-session bridge public-origin route wiring missing', 'customer snippets must not be permanently hardcoded to the production ActionBridge origin');
 }
 if (setupLinksRoute.includes('verifyActionBridgeConnectorSetupTargetOriginBinding(supabase as any')
   && setupLinksRoute.includes("bindingStatus === 'connector_not_found'")

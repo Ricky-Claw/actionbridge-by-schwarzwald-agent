@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createCoreServiceClient } from '@/lib/core/service-client';
-import { createActionBridgeSetupSessionView, digestActionBridgeSetupSessionToken, isActionBridgeSetupSessionUsable } from '@/lib/actionbridge/setup-session';
+import { createActionBridgeSetupSessionView, digestActionBridgeSetupSessionToken, isActionBridgeSetupSessionUsable, resolveActionBridgeSetupBridgePublicOrigin } from '@/lib/actionbridge/setup-session';
 import { createActionBridgeRateLimitHeaders, enforceActionBridgeRateLimitAsync } from '@/lib/actionbridge/rate-limit';
 import { createActionBridgeEmbeddedSetupDescriptor } from '@/lib/actionbridge/embedded-setup-ux';
 
@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
     record.status = 'opened';
   }
 
+  const bridgePublicOrigin = resolveActionBridgeSetupBridgePublicOrigin(new URL(request.url).origin);
   const [connectorResult, bridgeResult, capabilityRulesResult] = record.connector_id ? await Promise.all([
     (serviceSupabase as any)
       .from('actionbridge_connectors')
@@ -65,6 +66,7 @@ export async function GET(request: NextRequest) {
       connector: connectorResult.data || null,
       bridge: bridgeResult.data || null,
       capabilityRules: Array.isArray(capabilityRulesResult.data) ? capabilityRulesResult.data : [],
+      bridgePublicOrigin,
     }),
     embeddedSetup: createActionBridgeEmbeddedSetupDescriptor({
       connector: connectorResult.data ? {

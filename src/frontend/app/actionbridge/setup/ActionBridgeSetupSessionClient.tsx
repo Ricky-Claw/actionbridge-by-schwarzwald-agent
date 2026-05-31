@@ -7,7 +7,7 @@ type SetupSessionView = {
   targetOrigin: string;
   status: string;
   verification: Array<{ method: string; label: string; description: string }>;
-  bridgeInstall: { snippet: string; status?: string; mode?: string; lastSeenAt?: string | null };
+  bridgeInstall: { snippet: string; publicOrigin?: string; status?: string; mode?: string; lastSeenAt?: string | null };
   connector?: {
     id: string | null;
     type: string | null;
@@ -346,7 +346,7 @@ export default function ActionBridgeSetupSessionClient({ token }: { token: strin
         <div className="rounded-2xl border border-white/10 bg-black/20 p-4 md:col-span-2">
           <h3 className="font-semibold text-emerald-100">Bridge Script</h3>
           <pre className="mt-3 overflow-auto rounded-xl bg-neutral-950 p-3 text-xs text-neutral-300">{safeBridgeSnippet(setupSession.bridgeInstall.snippet, token)}</pre>
-          <p className="mt-3 text-xs text-neutral-500">Token wird nur maskiert angezeigt; Digest, Service-Daten und Secrets bleiben serverseitig.</p>
+          <p className="mt-3 text-xs text-neutral-500">Token wird nur maskiert angezeigt; Digest, Service-Daten und Secrets bleiben serverseitig. Bridge-Origin: {setupSession.bridgeInstall.publicOrigin || 'configured ActionBridge origin'}.</p>
         </div>
       </div>
 

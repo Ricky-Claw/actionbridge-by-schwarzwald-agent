@@ -196,7 +196,7 @@ if (!process.exitCode) {
   if (!process.exitCode) pass('ActionBridge bridge script v1 performs connected-only handshake');
 
   const setupSession = read('src/frontend/lib/actionbridge/setup-session.ts');
-  for (const token of ['createActionBridgeSetupSessionView', 'digestActionBridgeSetupSessionToken', 'isActionBridgeSetupSessionUsable', 'bridgeInstall', 'canIssueVerificationChallenge', 'capabilityChoices', 'site.knowledge.read', 'lead.prepare_draft', 'appointment.request.prepare_draft']) {
+  for (const token of ['createActionBridgeSetupSessionView', 'digestActionBridgeSetupSessionToken', 'isActionBridgeSetupSessionUsable', 'resolveActionBridgeSetupBridgePublicOrigin', 'normalizeActionBridgeSetupBridgePublicOrigin', 'ACTIONBRIDGE_PUBLIC_BASE_URL', 'bridgePublicOrigin', 'bridgeInstall', 'canIssueVerificationChallenge', 'capabilityChoices', 'site.knowledge.read', 'lead.prepare_draft', 'appointment.request.prepare_draft']) {
     if (!setupSession.includes(token)) fail(`setup-session.ts missing ${token}`);
   }
   if (setupSession.includes('secret_ref') || setupSession.includes('token_digest')) fail('setup-session view must not expose secrets or token digests');
@@ -448,7 +448,7 @@ if (!process.exitCode) {
     if (!setupLinksRoute.includes(token)) fail(`setup-links route missing ${token}`);
   }
   if (setupLinksRoute.includes('token_digest,') || setupLinksRoute.includes('token_digest)')) fail('setup-links route must not select/return token_digest');
-  for (const token of ['digestActionBridgeSetupSessionToken', 'createActionBridgeSetupSessionView', 'isActionBridgeSetupSessionUsable', 'ACTIONBRIDGE_SETUP_SESSION_NOT_FOUND', 'connector_id,target_origin', "status: 'opened'"]) {
+  for (const token of ['digestActionBridgeSetupSessionToken', 'createActionBridgeSetupSessionView', 'resolveActionBridgeSetupBridgePublicOrigin', 'bridgePublicOrigin', 'isActionBridgeSetupSessionUsable', 'ACTIONBRIDGE_SETUP_SESSION_NOT_FOUND', 'connector_id,target_origin', "status: 'opened'"]) {
     if (!setupSessionRoute.includes(token)) fail(`setup-session route missing ${token}`);
   }
   if (!setupSessionRoute.includes('createActionBridgeEmbeddedSetupDescriptor')) fail('setup-session route must include embedded setup descriptor');

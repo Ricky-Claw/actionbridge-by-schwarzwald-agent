@@ -1,7 +1,10 @@
 import 'server-only';
 
+import { isPrivateActionBridgeHost } from './http-connector';
 import { digestActionBridgeSetupLinkToken } from './setup-links';
 import type { ActionBridgeSetupVerificationMethod } from './setup-links';
+
+const ACTIONBRIDGE_DEFAULT_PUBLIC_BRIDGE_ORIGIN = 'https://actionbridge.schwarzwald-agent.de';
 
 export interface ActionBridgeSetupSessionRecord {
   id: string;
@@ -35,6 +38,7 @@ export interface ActionBridgeSetupSessionViewOptions {
   connector?: ActionBridgeSetupSessionConnectorSnapshot | null;
   bridge?: ActionBridgeSetupSessionBridgeSnapshot | null;
   capabilityRules?: ActionBridgeSetupSessionCapabilitySnapshot[];
+  bridgePublicOrigin?: string | null;
 }
 
 export interface ActionBridgeSetupSessionView {
@@ -50,6 +54,7 @@ export interface ActionBridgeSetupSessionView {
   }>;
   bridgeInstall: {
     mode: 'script_pending' | 'connected_only';
+    publicOrigin: string;
     snippet: string;
     status: 'script_pending' | 'connected' | 'stale' | 'revoked';
     lastSeenAt?: string | null;
@@ -79,6 +84,45 @@ export interface ActionBridgeSetupSessionView {
   expiresAt: string;
 }
 
+function isLocalActionBridgeDevHostname(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase().replace(/^\[|\]$/g, '');
+  return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1';
+}
+
+export function normalizeActionBridgeSetupBridgePublicOrigin(value: unknown, options: { allowLocalHttp?: boolean } = {}): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmedValue = value.trim();
+  if (trimmedValue !== value || !/^https:\/\//.test(trimmedValue)) {
+    if (!(options.allowLocalHttp === true && /^http:\/\//.test(trimmedValue))) return null;
+  }
+  let parsedUrl: URL;
+  try { parsedUrl = new URL(trimmedValue); } catch { return null; }
+
+  if (parsedUrl.username || parsedUrl.password) return null;
+  if (parsedUrl.pathname !== '/' || parsedUrl.search || parsedUrl.hash) return null;
+
+  if (parsedUrl.protocol === 'https:') {
+    if (isPrivateActionBridgeHost(parsedUrl.hostname)) return null;
+    return parsedUrl.origin;
+  }
+
+  if (options.allowLocalHttp === true && parsedUrl.protocol === 'http:' && isLocalActionBridgeDevHostname(parsedUrl.hostname)) {
+    return parsedUrl.origin;
+  }
+
+  return null;
+}
+
+export function resolveActionBridgeSetupBridgePublicOrigin(requestOrigin?: string | null): string {
+  const envOrigin = normalizeActionBridgeSetupBridgePublicOrigin(process.env.ACTIONBRIDGE_PUBLIC_BASE_URL);
+  if (envOrigin) return envOrigin;
+
+  const localRequestOrigin = normalizeActionBridgeSetupBridgePublicOrigin(requestOrigin, { allowLocalHttp: true });
+  if (process.env.NODE_ENV !== 'production' && localRequestOrigin?.startsWith('http://')) return localRequestOrigin;
+
+  return ACTIONBRIDGE_DEFAULT_PUBLIC_BRIDGE_ORIGIN;
+}
+
 export function digestActionBridgeSetupSessionToken(token: string): string {
   return digestActionBridgeSetupLinkToken(token);
 }
@@ -91,6 +135,7 @@ export function createActionBridgeSetupSessionView(record: ActionBridgeSetupSess
   const verified = Boolean(connector?.enabled && connector.safety_status === 'pass' && connector.permission_status === 'active');
   const bridgeConnected = bridge?.status === 'connected';
   const bridgeStatus = bridge?.status === 'connected' || bridge?.status === 'stale' || bridge?.status === 'revoked' ? bridge.status : 'script_pending';
+  const bridgePublicOrigin = normalizeActionBridgeSetupBridgePublicOrigin(options.bridgePublicOrigin, { allowLocalHttp: process.env.NODE_ENV !== 'production' }) || ACTIONBRIDGE_DEFAULT_PUBLIC_BRIDGE_ORIGIN;
   const capabilityChoices = [
     { name: 'site.knowledge.read', label: 'Website-Wissen lesen', riskLevel: 'read' as const, requiresApproval: false, enabled: capabilityRules.get('site.knowledge.read') === true },
     { name: 'lead.prepare_draft', label: 'Lead/Kontaktanfrage vorbereiten', riskLevel: 'write' as const, requiresApproval: true, enabled: capabilityRules.get('lead.prepare_draft') === true },
@@ -126,7 +171,8 @@ export function createActionBridgeSetupSessionView(record: ActionBridgeSetupSess
     })),
     bridgeInstall: {
       mode: bridgeConnected ? 'connected_only' : 'script_pending',
-      snippet: `<script src="https://actionbridge.schwarzwald-agent.de/actionbridge/bridge.js" data-endpoint="https://actionbridge.schwarzwald-agent.de/api/actionbridge/bridge/handshake" data-setup-token="SETUP_TOKEN_SHOWN_ONCE" async></script>`,
+      publicOrigin: bridgePublicOrigin,
+      snippet: `<script src="${bridgePublicOrigin}/actionbridge/bridge.js" data-endpoint="${bridgePublicOrigin}/api/actionbridge/bridge/handshake" data-setup-token="SETUP_TOKEN_SHOWN_ONCE" async></script>`,
       status: bridgeStatus,
       lastSeenAt: bridge?.last_seen_at || null,
     },

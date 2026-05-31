@@ -62,6 +62,37 @@ function normalizeActionBridgeConnectorBindingOrigin(value) {
   return parsedUrl.origin;
 }
 
+function isLocalActionBridgeDevHostname(hostname) {
+  const normalized = String(hostname || '').trim().toLowerCase().replace(/^\[|\]$/g, '');
+  return normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1';
+}
+
+function normalizeActionBridgeSetupBridgePublicOrigin(value, options = {}) {
+  if (typeof value !== 'string') return null;
+  const trimmedValue = value.trim();
+  if (trimmedValue !== value || !/^https:\/\//.test(trimmedValue)) {
+    if (!(options.allowLocalHttp === true && /^http:\/\//.test(trimmedValue))) return null;
+  }
+  let parsedUrl;
+  try { parsedUrl = new URL(trimmedValue); } catch { return null; }
+  if (parsedUrl.username || parsedUrl.password) return null;
+  if (parsedUrl.pathname !== '/' || parsedUrl.search || parsedUrl.hash) return null;
+  if (parsedUrl.protocol === 'https:') {
+    if (isUnsafeSetupHost(parsedUrl.hostname)) return null;
+    return parsedUrl.origin;
+  }
+  if (options.allowLocalHttp === true && parsedUrl.protocol === 'http:' && isLocalActionBridgeDevHostname(parsedUrl.hostname)) return parsedUrl.origin;
+  return null;
+}
+
+function resolveActionBridgeSetupBridgePublicOriginModel({ envOrigin, requestOrigin, nodeEnv = 'production' }) {
+  const normalizedEnv = normalizeActionBridgeSetupBridgePublicOrigin(envOrigin);
+  if (normalizedEnv) return normalizedEnv;
+  const localRequestOrigin = normalizeActionBridgeSetupBridgePublicOrigin(requestOrigin, { allowLocalHttp: true });
+  if (nodeEnv !== 'production' && localRequestOrigin?.startsWith('http://')) return localRequestOrigin;
+  return 'https://actionbridge.schwarzwald-agent.de';
+}
+
 function actionBridgeConnectorAllowsSetupTargetOrigin(connector, targetOrigin) {
   const normalizedTargetOrigin = normalizeActionBridgeSetupLinkOrigin(targetOrigin);
   if (!normalizedTargetOrigin) return false;
@@ -204,6 +235,33 @@ for (const [label, connector, targetOrigin, expected] of [
   const actual = actionBridgeConnectorAllowsSetupTargetOrigin(connector, targetOrigin);
   if (actual === expected) pass(`setup link origin binding behavior: ${label}`, `=> ${actual}`);
   else fail(`setup link origin binding behavior: ${label}`, `expected ${expected}, got ${actual}`);
+}
+
+for (const [label, value, options, expected] of [
+  ['public HTTPS origin accepted', 'https://staging.actionbridge.example', {}, 'https://staging.actionbridge.example'],
+  ['origin with path rejected', 'https://staging.actionbridge.example/setup', {}, null],
+  ['userinfo rejected', 'https://token@staging.actionbridge.example', {}, null],
+  ['lenient URL without slashes rejected', 'https:staging.actionbridge.example', {}, null],
+  ['trimmed origin rejected to keep env exact', ' https://staging.actionbridge.example ', {}, null],
+  ['private HTTPS origin rejected', 'https://localhost', {}, null],
+  ['local HTTP rejected by default', 'http://127.0.0.1:4317', {}, null],
+  ['local HTTP accepted only for dev option', 'http://127.0.0.1:4317', { allowLocalHttp: true }, 'http://127.0.0.1:4317'],
+]) {
+  const actual = normalizeActionBridgeSetupBridgePublicOrigin(value, options);
+  if (actual === expected) pass(`setup bridge public origin normalization: ${label}`, `=> ${String(actual)}`);
+  else fail(`setup bridge public origin normalization: ${label}`, `expected ${String(expected)}, got ${String(actual)}`);
+}
+
+for (const [label, input, expected] of [
+  ['env origin wins for deployed staging', { envOrigin: 'https://staging.actionbridge.example', requestOrigin: 'https://evil.example', nodeEnv: 'production' }, 'https://staging.actionbridge.example'],
+  ['invalid env falls back to canonical production in production mode', { envOrigin: 'https://localhost', requestOrigin: 'https://evil.example', nodeEnv: 'production' }, 'https://actionbridge.schwarzwald-agent.de'],
+  ['request origin is not trusted in production without env', { envOrigin: '', requestOrigin: 'https://evil.example', nodeEnv: 'production' }, 'https://actionbridge.schwarzwald-agent.de'],
+  ['public HTTPS request origin is not trusted in development without env', { envOrigin: '', requestOrigin: 'https://evil.example', nodeEnv: 'development' }, 'https://actionbridge.schwarzwald-agent.de'],
+  ['local request origin allowed in development', { envOrigin: '', requestOrigin: 'http://127.0.0.1:4317', nodeEnv: 'development' }, 'http://127.0.0.1:4317'],
+]) {
+  const actual = resolveActionBridgeSetupBridgePublicOriginModel(input);
+  if (actual === expected) pass(`setup bridge public origin resolution: ${label}`, `=> ${actual}`);
+  else fail(`setup bridge public origin resolution: ${label}`, `expected ${expected}, got ${actual}`);
 }
 
 for (const [label, value, expected] of [

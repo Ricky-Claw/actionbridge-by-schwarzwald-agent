@@ -32,6 +32,7 @@ This runbook is operator-facing: it tells the human operator what to prepare, wh
 - Any Webhook-v1 receiver is a controlled test receiver, not a real CRM/form inbox, unless explicitly approved.
 - Connector config is server-owned; caller bodies must not provide raw destination URLs or raw secrets.
 - If webhook signing is enabled, only server-owned `secret_ref` values are used.
+- `ACTIONBRIDGE_PUBLIC_BASE_URL` is set to the exact deployed ActionBridge HTTPS origin for staging/production so customer setup snippets post setup tokens back to the same approved environment, not a hardcoded or request-header-derived origin.
 - Local verification is green before the smoke run:
 
 ```bash
@@ -95,11 +96,13 @@ Expected result:
 
 ### 4. Bridge handshake check
 1. Install or simulate only the connected-only Bridge Script v1 path documented for the pilot.
-2. Confirm bridge handshake proves connectivity only.
-3. Confirm the bridge does not read cookies, scrape private content, submit forms, or execute arbitrary browser/RPA actions.
+2. Confirm the script `src` and `data-endpoint` use the configured ActionBridge public origin from `ACTIONBRIDGE_PUBLIC_BASE_URL` for this environment.
+3. Confirm bridge handshake proves connectivity only.
+4. Confirm the bridge does not read cookies, scrape private content, submit forms, or execute arbitrary browser/RPA actions.
 
 Expected result:
 - Bridge status is connected without granting raw website access.
+- Setup tokens are posted only to the approved ActionBridge environment for the smoke run.
 
 ### 5. Activate minimal capability rules
 1. Enable only the minimum pilot capability needed, usually `lead.submit`.

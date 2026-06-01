@@ -12,10 +12,12 @@ const modulePath = 'src/frontend/lib/actionbridge/multi-target-registry.ts';
 const migrationPath = 'supabase/migrations/20260519143000_actionbridge_multi_target_registry.sql';
 const routePath = 'src/frontend/app/api/actionbridge/targets/route.ts';
 const uiPath = 'src/frontend/app/actionbridge/operator/ActionBridgeTargetsClient.tsx';
+const dashboardUiPath = 'src/frontend/app/dashboard/webseiten-verbinden/SchwarzwaldWebsitesActionBridgeClient.tsx';
 const moduleSource = read(modulePath);
 const migration = read(migrationPath);
 const routeSource = read(routePath);
 const uiSource = read(uiPath);
+const dashboardUiSource = read(dashboardUiPath);
 
 for (const token of [
   'ACTIONBRIDGE_DEFAULT_BRIDGE_ORIGIN',
@@ -151,6 +153,9 @@ for (const token of [
   'https.request',
   'timeout: input.timeoutMs',
   'ACTIONBRIDGE_TARGET_LIVE_CHECK_FAILED',
+  '/actionbridge/bridge.js',
+  'data-endpoint',
+  'data-setup-token',
   'bridge.schwarzwald-agent.de/bridge.js',
   'input.html.slice(0, MAX_LIVE_CHECK_BYTES)',
   'decideActionBridgeDnsPinning',
@@ -178,3 +183,11 @@ for (const token of [
   if (!uiSource.includes(token)) fail(`targets UI missing ${token}`);
 }
 pass('Targets operator UI supports multi-URL intake/status and theme tokens without mock production data');
+
+for (const token of ['Registry- und Statusansicht', 'Setup-Session', 'Domain-Verifikation', 'Capabilities']) {
+  if (!dashboardUiSource.includes(token)) fail(`dashboard ActionBridge embed missing registry-only notice marker: ${token}`);
+}
+for (const forbidden of ['snippetForTarget', 'data-actionbridge-target=', 'target.bridgeOrigin}/bridge.js']) {
+  if (dashboardUiSource.includes(forbidden)) fail(`dashboard ActionBridge embed must not show fake target-card install snippet: ${forbidden}`);
+}
+pass('Dashboard ActionBridge embed keeps target cards registry/status-only and delegates installation to setup-session snippets');

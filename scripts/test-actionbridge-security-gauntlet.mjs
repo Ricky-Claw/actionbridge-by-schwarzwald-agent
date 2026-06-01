@@ -234,6 +234,13 @@ if (bridgeHandshakeRoute.includes('ACTIONBRIDGE_BRIDGE_INSTALLATION_REVOKED') &&
 else fail('bridge installation revocation gate', 'revoked bridge installations could be upserted back to connected');
 if (bridgeHandshakeRoute.includes("update({ status: 'completed' })") && bridgeHandshakeRoute.includes("eventName: 'bridge.handshake.connected'")) pass('bridge handshake completes setup link and audits connection');
 else fail('bridge handshake completion/audit gate', 'successful bridge handshakes must close setup replay and audit connection');
+if (bridgeHandshakeRoute.includes("completedSetupLink?.status !== 'completed'")
+  && bridgeHandshakeRoute.includes('ACTIONBRIDGE_SETUP_LINK_CLOSE_FAILED')
+  && bridgeHandshakeRoute.includes("update({ status: 'stale', last_seen_at: now })")) {
+  pass('bridge handshake fails closed when setup-link close compare-and-set returns no completed row');
+} else {
+  fail('bridge handshake close compare-and-set gate', 'connected success must depend on an owner-scoped pending/opened to completed setup-link update');
+}
 
 const rateLimit = read('src/frontend/lib/actionbridge/rate-limit.ts');
 for (const token of ['ACTIONBRIDGE_RATE_LIMITED', 'ACTIONBRIDGE_TRUSTED_PROXY_REQUIRED', 'ACTIONBRIDGE_TRUSTED_PROXY_HEADER', 'getActionBridgeTrustedClientIdentity', 'production_distributed_required', 'Retry-After', 'setupLinks', 'setupSession', 'bridgeHandshake', 'domainVerification', 'webhookDelivery', 'webhookFailureQuarantine', 'keyDigest', 'ACTIONBRIDGE_RATE_LIMIT_MODE', 'pilot_process_local', 'ACTIONBRIDGE_PRODUCTION_RATE_LIMIT_REQUIREMENTS', 'trusted_proxy_header_policy', 'redacted_rate_limit_telemetry', 'decideActionBridgeWebhookDeliveryThrottle', 'recordActionBridgeWebhookFailureQuarantine', 'MAX_PILOT_BUCKETS']) {

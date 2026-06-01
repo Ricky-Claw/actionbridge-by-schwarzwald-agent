@@ -197,6 +197,6 @@ export function createActionBridgeSetupSessionView(record: ActionBridgeSetupSess
 }
 
 export function isActionBridgeSetupSessionUsable(record: Pick<ActionBridgeSetupSessionRecord, 'status' | 'expires_at'>): boolean {
-  if (record.status === 'revoked' || record.status === 'expired') return false;
+  if (record.status !== 'pending' && record.status !== 'opened') return false;
   return new Date(record.expires_at).getTime() > Date.now();
 }

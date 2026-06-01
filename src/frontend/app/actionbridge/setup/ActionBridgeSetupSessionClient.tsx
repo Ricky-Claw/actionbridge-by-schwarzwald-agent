@@ -301,6 +301,7 @@ export default function ActionBridgeSetupSessionClient({ token }: { token: strin
   const activeStepIndex = Math.max(0, setupSteps.findIndex((step) => step.id === activeStepId));
   const selectedCapabilityViews = setupSession.capabilityChoices.filter((capability) => selectedCapabilities.includes(capability.name));
   const canSaveCapabilities = Boolean(setupSession.connector?.id && (connection.verified || verificationState.status === 'verified') && capabilitySaveState.status !== 'saving');
+  const bridgeInstallReady = connection.enabledCapabilities.length > 0;
 
   return (
     <section className="rounded-3xl border border-emerald-300/20 bg-neutral-900/80 p-6 shadow-2xl">
@@ -345,7 +346,13 @@ export default function ActionBridgeSetupSessionClient({ token }: { token: strin
         </div>
         <div className="rounded-2xl border border-white/10 bg-black/20 p-4 md:col-span-2">
           <h3 className="font-semibold text-emerald-100">Bridge Script</h3>
-          <pre className="mt-3 overflow-auto rounded-xl bg-neutral-950 p-3 text-xs text-neutral-300">{safeBridgeSnippet(setupSession.bridgeInstall.snippet, token)}</pre>
+          {bridgeInstallReady ? (
+            <pre className="mt-3 overflow-auto rounded-xl bg-neutral-950 p-3 text-xs text-neutral-300">{safeBridgeSnippet(setupSession.bridgeInstall.snippet, token)}</pre>
+          ) : (
+            <div className="mt-3 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3 text-sm text-amber-100">
+              Bridge-Script wird erst nach verifizierter Domain und gespeicherten Capabilities angezeigt. So kann der Handshake den Setup-Link nicht schließen, bevor Berechtigungen auditierbar festgelegt sind.
+            </div>
+          )}
           <p className="mt-3 text-xs text-neutral-500">Token wird nur maskiert angezeigt; Digest, Service-Daten und Secrets bleiben serverseitig. Bridge-Origin: {setupSession.bridgeInstall.publicOrigin || 'configured ActionBridge origin'}.</p>
         </div>
       </div>

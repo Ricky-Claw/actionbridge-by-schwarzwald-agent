@@ -34,15 +34,15 @@ function safeTenantId(value: unknown): string | null {
   return tenantId;
 }
 
-async function bootstrapTenantMembershipIfEmpty(supabase: any, input: { providerId: string; tenantId: string; userId: string }) {
-  const { count, error } = await supabase
+async function bootstrapTenantMembershipIfEmpty(input: { providerId: string; tenantId: string; userId: string }) {
+  const serviceSupabase = createCoreServiceClient();
+  if (!serviceSupabase) return { ok: false };
+  const { count, error } = await (serviceSupabase as any)
     .from('actionbridge_tenant_memberships')
     .select('user_id', { count: 'exact', head: true })
     .eq('provider_id', input.providerId)
     .eq('tenant_id', input.tenantId);
   if (error || count !== 0) return { ok: false };
-  const serviceSupabase = createCoreServiceClient();
-  if (!serviceSupabase) return { ok: false };
   const { error: insertError } = await (serviceSupabase as any)
     .from('actionbridge_tenant_memberships')
     .insert({ provider_id: input.providerId, tenant_id: input.tenantId, user_id: input.userId, role: 'owner' });
@@ -59,7 +59,7 @@ async function requireTenantMembership(supabase: any, input: { providerId: strin
     .maybeSingle();
   if (error || !data) {
     if (input.bootstrapIfEmpty) {
-      const bootstrap = await bootstrapTenantMembershipIfEmpty(supabase, input);
+      const bootstrap = await bootstrapTenantMembershipIfEmpty(input);
       if (bootstrap.ok) return requireTenantMembership(supabase, { ...input, bootstrapIfEmpty: false });
     }
     return { ok: false, response: NextResponse.json({ error: 'ACTIONBRIDGE_TARGET_TENANT_FORBIDDEN' }, { status: 403 }) };
@@ -125,9 +125,15 @@ function validateStoredTargetForLiveCheck(target: ActionBridgeTarget) {
 
 function detectActionBridgeBridgeScript(input: { html: string; target: ActionBridgeTarget }) {
   const boundedBody = input.html.slice(0, MAX_LIVE_CHECK_BYTES);
-  const expectedScript = `${input.target.bridgeOrigin}/bridge.js`;
-  const scriptFound = boundedBody.includes(expectedScript) || boundedBody.includes('bridge.schwarzwald-agent.de/bridge.js');
-  const targetBound = boundedBody.includes(`data-actionbridge-target="${input.target.id}"`) || boundedBody.includes(`data-actionbridge-target='${input.target.id}'`);
+  const expectedSetupScript = `${input.target.bridgeOrigin}/actionbridge/bridge.js`;
+  const expectedLegacyScript = `${input.target.bridgeOrigin}/bridge.js`;
+  const setupScriptFound = boundedBody.includes(expectedSetupScript) || boundedBody.includes('/actionbridge/bridge.js');
+  const legacyScriptFound = boundedBody.includes(expectedLegacyScript) || boundedBody.includes('bridge.schwarzwald-agent.de/bridge.js');
+  const dataAttributePresent = (name: string) => new RegExp(`\\s${name}\\s*=`, 'i').test(boundedBody);
+  const setupSessionBound = dataAttributePresent('data-endpoint') && dataAttributePresent('data-setup-token');
+  const legacyTargetBound = boundedBody.includes(`data-actionbridge-target="${input.target.id}"`) || boundedBody.includes(`data-actionbridge-target='${input.target.id}'`);
+  const scriptFound = setupScriptFound || legacyScriptFound;
+  const targetBound = setupSessionBound || legacyTargetBound;
   return {
     scriptFound,
     targetBound,

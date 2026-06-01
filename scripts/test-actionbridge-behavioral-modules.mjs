@@ -55,6 +55,42 @@ runExtractedFunction('src/frontend/app/api/actionbridge/connectors/route.ts', 'n
   ['backslash rejected fail-closed', '/hook\\evil', null],
 ]);
 
+const setupSessionSource = read('src/frontend/lib/actionbridge/setup-session.ts');
+const setupSessionUsableFnSource = extractFunction(setupSessionSource, 'isActionBridgeSetupSessionUsable')
+  .replace(/export /g, '')
+  .replace(/record: Pick<ActionBridgeSetupSessionRecord, 'status' \| 'expires_at'>/g, 'record')
+  .replace(/: boolean/g, '');
+const setupSessionContext = {};
+vm.createContext(setupSessionContext);
+vm.runInContext(`${setupSessionUsableFnSource}; globalThis.__isSetupSessionUsable = isActionBridgeSetupSessionUsable;`, setupSessionContext);
+const futureSetupExpiry = new Date(Date.now() + 60_000).toISOString();
+const pastSetupExpiry = new Date(Date.now() - 60_000).toISOString();
+for (const [label, record, expected] of [
+  ['pending unexpired token remains usable', { status: 'pending', expires_at: futureSetupExpiry }, true],
+  ['opened unexpired token remains usable', { status: 'opened', expires_at: futureSetupExpiry }, true],
+  ['completed setup link is closed fail-closed', { status: 'completed', expires_at: futureSetupExpiry }, false],
+  ['revoked setup link is closed fail-closed', { status: 'revoked', expires_at: futureSetupExpiry }, false],
+  ['expired setup link is closed fail-closed', { status: 'expired', expires_at: futureSetupExpiry }, false],
+  ['unknown future status fails closed', { status: 'unknown_future_status', expires_at: futureSetupExpiry }, false],
+  ['past expiry fails closed even while pending', { status: 'pending', expires_at: pastSetupExpiry }, false],
+]) {
+  const actual = setupSessionContext.__isSetupSessionUsable(record);
+  if (actual === expected) pass(`isActionBridgeSetupSessionUsable: ${label}`, `=> ${String(actual)}`);
+  else fail(`isActionBridgeSetupSessionUsable: ${label}`, `expected ${String(expected)}, got ${String(actual)}`);
+}
+
+const bridgeHandshakeRouteSource = read('src/frontend/app/api/actionbridge/bridge/handshake/route.ts');
+for (const [label, pattern] of [
+  ['bridge handshake requires a bound connector before creating an installation', /if \(!setupLink\.connector_id\)[\s\S]*ACTIONBRIDGE_BRIDGE_CONNECTOR_REQUIRED[\s\S]*from\('actionbridge_bridge_installations'\)/],
+  ['bridge handshake requires verified active connector before completion', /from\('actionbridge_connectors'\)[\s\S]*enabled,safety_status,permission_status[\s\S]*ACTIONBRIDGE_BRIDGE_REQUIRES_VERIFIED_ACTIVE_CONNECTOR[\s\S]*update\(\{ status: 'completed' \}\)/],
+  ['bridge handshake requires saved enabled capabilities before completion', /from\('actionbridge_capability_rules'\)[\s\S]*\.eq\('enabled', true\)[\s\S]*ACTIONBRIDGE_BRIDGE_REQUIRES_SAVED_CAPABILITIES[\s\S]*update\(\{ status: 'completed' \}\)/],
+  ['bridge handshake closes setup links with owner-scoped compare-and-set before success', /update\(\{ status: 'completed' \}\)[\s\S]*\.eq\('id', setupLink\.id\)[\s\S]*\.eq\('user_id', setupLink\.user_id\)[\s\S]*\.in\('status', \['pending', 'opened'\]\)[\s\S]*\.select\('id,status'\)[\s\S]*completedSetupLink\?\.status !== 'completed'[\s\S]*ACTIONBRIDGE_SETUP_LINK_CLOSE_FAILED/],
+  ['bridge handshake audits known setup-link denial and close-failure paths', /persistBridgeHandshakeDeniedAudit[\s\S]*ACTIONBRIDGE_BRIDGE_ORIGIN_MISMATCH[\s\S]*ACTIONBRIDGE_SETUP_LINK_EXPIRED_OR_REVOKED[\s\S]*ACTIONBRIDGE_BRIDGE_CONNECTOR_BINDING_NOT_FOUND[\s\S]*ACTIONBRIDGE_BRIDGE_INSTALLATION_REVOKED[\s\S]*ACTIONBRIDGE_SETUP_LINK_CLOSE_FAILED/],
+]) {
+  if (pattern.test(bridgeHandshakeRouteSource)) pass(`bridge handshake completion guard: ${label}`);
+  else fail(`bridge handshake completion guard: ${label}`);
+}
+
 const redactionSource = read('src/frontend/lib/actionbridge/redaction.ts')
   .replace(/export /g, '')
   .replace(/key: string/g, 'key')

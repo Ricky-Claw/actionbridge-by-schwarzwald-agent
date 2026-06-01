@@ -390,7 +390,7 @@ if (!process.exitCode) {
   if (!connectorsRoute.includes('createActionBridgeEmbeddedSetupDescriptor')) fail('connectors route must expose embedded setup descriptor');
   if (!connectorsRoute.includes('embeddedSetup')) fail('connectors route must include embeddedSetup response field');
   if (!connectorsRoute.includes('webhook_signing_mode') || !connectorsRoute.includes('webhookSigningMode')) fail('connectors route must expose explicit webhook signing mode without secrets');
-  for (const token of ['actionbridge_targets', 'requireTenantMembership', 'actionbridge_tenant_memberships', '.eq(\'tenant_id\', tenantId)', 'createActionBridgeTargetsFromUrls', 'createActionBridgeTargetToolCatalog', 'networkExecution: false']) {
+  for (const token of ['actionbridge_targets', 'requireTenantMembership', 'actionbridge_tenant_memberships', '.eq(\'tenant_id\', tenantId)', 'bootstrapTenantMembershipIfEmpty(input', "(serviceSupabase as any)\n    .from('actionbridge_tenant_memberships')", 'createActionBridgeTargetsFromUrls', 'createActionBridgeTargetToolCatalog', 'networkExecution: false']) {
     if (!targetsRoute.includes(token)) fail(`targets route missing ${token}`);
   }
   if (!connectorsRoute.includes("new Set(['http', 'website', 'webhook', 'whatsapp_business', 'backend_bridge'])")) fail('connectors route must allow website, webhook, WhatsApp Business, and backend bridge connector types');
@@ -461,7 +461,7 @@ if (!process.exitCode) {
     if (!setupSessionVerificationRoute.includes(token)) fail(`setup-session verification route missing ${token}`);
   }
   if (setupSessionVerificationRoute.includes('auth.getUser')) fail('setup-session verification must be setup-token scoped, not browser-auth scoped');
-  for (const token of ['parseActionBridgeBridgeHandshake', 'actionbridge_setup_links', 'actionbridge_bridge_installations', 'getActionBridgeBridgeOriginHeader', '!originHeader', 'parsed.origin !== originHeader', 'connected_only', 'Access-Control-Allow-Origin', 'Access-Control-Allow-Methods', 'OPTIONS']) {
+  for (const token of ['parseActionBridgeBridgeHandshake', 'actionbridge_setup_links', 'actionbridge_bridge_installations', 'actionbridge_capability_rules', 'getActionBridgeBridgeOriginHeader', '!originHeader', 'parsed.origin !== originHeader', 'ACTIONBRIDGE_BRIDGE_CONNECTOR_REQUIRED', 'ACTIONBRIDGE_BRIDGE_REQUIRES_VERIFIED_ACTIVE_CONNECTOR', 'ACTIONBRIDGE_BRIDGE_REQUIRES_SAVED_CAPABILITIES', 'ACTIONBRIDGE_SETUP_LINK_CLOSE_FAILED', "completedSetupLink?.status !== 'completed'", ".eq('user_id', setupLink.user_id)", ".select('id,status')", 'connected_only', 'Access-Control-Allow-Origin', 'Access-Control-Allow-Methods', 'OPTIONS']) {
     if (!bridgeHandshakeRoute.includes(token)) fail(`bridge handshake route missing ${token}`);
   }
   if (bridgeHandshakeRoute.includes('secret_ref') || bridgeHandshakeRoute.includes('base_url')) fail('bridge handshake route must not select secrets or connector base URLs');

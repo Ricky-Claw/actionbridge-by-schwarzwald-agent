@@ -42,10 +42,10 @@ Not allowed:
    - DNS TXT
    - Meta Tag
    - `.well-known/actionbridge-verify.txt`
-4. Customer installs bridge script/plugin only if needed.
-5. Bridge performs connected-only handshake.
-6. ActionBridge marks setup link completed.
-7. Operator/customer enables allowed capabilities.
+4. Operator/customer enables allowed capabilities while the setup link is still `pending` or `opened`.
+5. Customer installs bridge script/plugin only if needed.
+6. Bridge performs connected-only handshake.
+7. ActionBridge marks the setup link `completed`; the setup token is then closed and cannot be reused for verification or capability changes.
 8. Agent/tool caller requests action.
 9. ActionBridge evaluates policy.
 10. Write-risk action creates approval.
@@ -109,8 +109,9 @@ Before pilot:
 
 ## Failure Handling
 - Invalid setup token: fail closed with 400/404.
-- Expired/revoked/completed setup: fail closed with 409.
+- Expired/revoked/completed setup: fail closed with 409. Only `pending` and `opened` setup links may use token-scoped setup-session, verification, or capability routes.
 - Origin mismatch: fail closed with 403.
+- Bridge handshake before verified active connector status and at least one saved capability: fail closed with 409 and keep the setup link open.
 - Verification mismatch/expired: fail closed with 403/409.
 - Approval not executable/reused incorrectly: fail closed with 409.
 - Lead connector delivery state persist failure: mark execution failed and return 503.
@@ -123,8 +124,8 @@ Before pilot:
 ## Pilot Exit Criteria
 Pilot is successful when:
 - Customer can verify a domain.
-- Bridge connects and closes setup link.
 - Allowed capability appears as tool schema.
+- Bridge connects and closes setup link after capability selection.
 - Write-risk action queues approval.
 - Human approval leads to controlled connector delivery state.
 - Webhook-v1, if enabled, delivers only to verified authorized origins and has Sentinel conditional GO.

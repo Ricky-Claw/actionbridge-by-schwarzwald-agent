@@ -32,6 +32,45 @@ function bridgeHandshakeJson(body: Record<string, unknown>, init: ResponseInit, 
   return NextResponse.json(body, { ...init, headers: { ...corsHeaders, ...(init.headers || {}) } });
 }
 
+type BridgeHandshakeSetupLinkForAudit = {
+  id: string;
+  user_id: string;
+  connector_id?: string | null;
+  target_origin?: string | null;
+  status?: string | null;
+  expires_at?: string | null;
+};
+
+async function persistBridgeHandshakeDeniedAudit(
+  serviceSupabase: any,
+  setupLink: BridgeHandshakeSetupLinkForAudit,
+  input: {
+    reason: string;
+    status?: 'denied' | 'failed';
+    targetOrigin?: string;
+    bridgeVersion?: string;
+    connectorId?: string | null;
+    resultSummary?: Record<string, unknown>;
+  },
+) {
+  await persistActionBridgeControlAuditEvent(serviceSupabase, {
+    userId: setupLink.user_id,
+    connectorId: input.connectorId === undefined ? setupLink.connector_id || null : input.connectorId,
+    eventName: 'bridge.handshake.denied',
+    input: {
+      setupLinkId: setupLink.id,
+      targetOrigin: input.targetOrigin || setupLink.target_origin || null,
+      bridgeVersion: input.bridgeVersion,
+      setupLinkStatus: setupLink.status || null,
+    },
+    status: input.status || 'denied',
+    resultSummary: {
+      reason: input.reason,
+      ...(input.resultSummary || {}),
+    },
+  });
+}
+
 export async function OPTIONS(request: NextRequest) {
   const corsHeaders = createActionBridgeBridgeCorsHeaders(request);
   if (!corsHeaders['Access-Control-Allow-Origin']) {
@@ -68,31 +107,97 @@ export async function POST(request: NextRequest) {
     .eq('token_digest', parsed.tokenDigest)
     .maybeSingle();
   if (!setupLink) return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_SETUP_LINK_NOT_FOUND' }, { status: 404 }, corsHeaders);
-  if (setupLink.target_origin !== parsed.origin) return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_BRIDGE_ORIGIN_MISMATCH' }, { status: 403 }, corsHeaders);
+  if (setupLink.target_origin !== parsed.origin) {
+    await persistBridgeHandshakeDeniedAudit(serviceSupabase, setupLink, {
+      reason: 'ACTIONBRIDGE_BRIDGE_ORIGIN_MISMATCH',
+      targetOrigin: parsed.origin,
+      bridgeVersion: parsed.bridgeVersion,
+      resultSummary: { expectedOrigin: setupLink.target_origin },
+    });
+    return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_BRIDGE_ORIGIN_MISMATCH' }, { status: 403 }, corsHeaders);
+  }
   if (!['pending', 'opened'].includes(setupLink.status) || new Date(setupLink.expires_at).getTime() < Date.now()) {
+    await persistBridgeHandshakeDeniedAudit(serviceSupabase, setupLink, {
+      reason: 'ACTIONBRIDGE_SETUP_LINK_EXPIRED_OR_REVOKED',
+      targetOrigin: parsed.origin,
+      bridgeVersion: parsed.bridgeVersion,
+      resultSummary: { setupLinkStatus: setupLink.status, expiresAt: setupLink.expires_at },
+    });
     return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_SETUP_LINK_EXPIRED_OR_REVOKED' }, { status: 409 }, corsHeaders);
   }
 
-  if (setupLink.connector_id) {
-    const bindingStatus = await verifyActionBridgeConnectorSetupTargetOriginBinding(serviceSupabase as any, {
-      userId: setupLink.user_id,
-      connectorId: setupLink.connector_id,
-      targetOrigin: setupLink.target_origin,
+  if (!setupLink.connector_id) {
+    await persistBridgeHandshakeDeniedAudit(serviceSupabase, setupLink, {
+      reason: 'ACTIONBRIDGE_BRIDGE_CONNECTOR_REQUIRED',
+      targetOrigin: parsed.origin,
+      bridgeVersion: parsed.bridgeVersion,
+      connectorId: null,
     });
-    if (bindingStatus === 'connector_not_found') {
-      return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_BRIDGE_CONNECTOR_BINDING_NOT_FOUND' }, { status: 409 }, corsHeaders);
-    }
-    if (bindingStatus !== 'matched') {
-      await persistActionBridgeControlAuditEvent(serviceSupabase, {
-        userId: setupLink.user_id,
-        connectorId: setupLink.connector_id,
-        eventName: 'bridge.handshake.denied',
-        input: { setupLinkId: setupLink.id, targetOrigin: parsed.origin, bridgeVersion: parsed.bridgeVersion },
-        status: 'denied',
-        resultSummary: { reason: 'ACTIONBRIDGE_BRIDGE_CONNECTOR_ORIGIN_MISMATCH' },
-      });
-      return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_BRIDGE_CONNECTOR_ORIGIN_MISMATCH' }, { status: 409 }, corsHeaders);
-    }
+    return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_BRIDGE_CONNECTOR_REQUIRED' }, { status: 409 }, corsHeaders);
+  }
+
+  const bindingStatus = await verifyActionBridgeConnectorSetupTargetOriginBinding(serviceSupabase as any, {
+    userId: setupLink.user_id,
+    connectorId: setupLink.connector_id,
+    targetOrigin: setupLink.target_origin,
+  });
+  if (bindingStatus === 'connector_not_found') {
+    await persistBridgeHandshakeDeniedAudit(serviceSupabase, setupLink, {
+      reason: 'ACTIONBRIDGE_BRIDGE_CONNECTOR_BINDING_NOT_FOUND',
+      targetOrigin: parsed.origin,
+      bridgeVersion: parsed.bridgeVersion,
+    });
+    return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_BRIDGE_CONNECTOR_BINDING_NOT_FOUND' }, { status: 409 }, corsHeaders);
+  }
+  if (bindingStatus !== 'matched') {
+    await persistBridgeHandshakeDeniedAudit(serviceSupabase, setupLink, {
+      reason: 'ACTIONBRIDGE_BRIDGE_CONNECTOR_ORIGIN_MISMATCH',
+      targetOrigin: parsed.origin,
+      bridgeVersion: parsed.bridgeVersion,
+    });
+    return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_BRIDGE_CONNECTOR_ORIGIN_MISMATCH' }, { status: 409 }, corsHeaders);
+  }
+
+  const { data: connector, error: connectorError } = await (serviceSupabase as any)
+    .from('actionbridge_connectors')
+    .select('id,enabled,safety_status,permission_status')
+    .eq('user_id', setupLink.user_id)
+    .eq('id', setupLink.connector_id)
+    .maybeSingle();
+  if (connectorError || !connector) {
+    await persistBridgeHandshakeDeniedAudit(serviceSupabase, setupLink, {
+      reason: 'ACTIONBRIDGE_BRIDGE_CONNECTOR_BINDING_NOT_FOUND',
+      status: connectorError ? 'failed' : 'denied',
+      targetOrigin: parsed.origin,
+      bridgeVersion: parsed.bridgeVersion,
+      resultSummary: { lookupError: connectorError?.message || null },
+    });
+    return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_BRIDGE_CONNECTOR_BINDING_NOT_FOUND' }, { status: 409 }, corsHeaders);
+  }
+  if (!connector.enabled || connector.safety_status !== 'pass' || connector.permission_status !== 'active') {
+    await persistBridgeHandshakeDeniedAudit(serviceSupabase, setupLink, {
+      reason: 'ACTIONBRIDGE_BRIDGE_REQUIRES_VERIFIED_ACTIVE_CONNECTOR',
+      targetOrigin: parsed.origin,
+      bridgeVersion: parsed.bridgeVersion,
+    });
+    return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_BRIDGE_REQUIRES_VERIFIED_ACTIVE_CONNECTOR' }, { status: 409 }, corsHeaders);
+  }
+
+  const { data: enabledCapabilityRules, error: capabilityRulesError } = await (serviceSupabase as any)
+    .from('actionbridge_capability_rules')
+    .select('name,enabled')
+    .eq('user_id', setupLink.user_id)
+    .eq('connector_id', setupLink.connector_id)
+    .eq('enabled', true)
+    .limit(20);
+  if (capabilityRulesError) return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_BRIDGE_CAPABILITY_LOOKUP_FAILED' }, { status: 503 }, corsHeaders);
+  if (!Array.isArray(enabledCapabilityRules) || enabledCapabilityRules.length < 1) {
+    await persistBridgeHandshakeDeniedAudit(serviceSupabase, setupLink, {
+      reason: 'ACTIONBRIDGE_BRIDGE_REQUIRES_SAVED_CAPABILITIES',
+      targetOrigin: parsed.origin,
+      bridgeVersion: parsed.bridgeVersion,
+    });
+    return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_BRIDGE_REQUIRES_SAVED_CAPABILITIES' }, { status: 409 }, corsHeaders);
   }
 
   const now = new Date().toISOString();
@@ -103,6 +208,12 @@ export async function POST(request: NextRequest) {
     .eq('target_origin', parsed.origin)
     .maybeSingle();
   if (existingInstallation?.status === 'revoked') {
+    await persistBridgeHandshakeDeniedAudit(serviceSupabase, setupLink, {
+      reason: 'ACTIONBRIDGE_BRIDGE_INSTALLATION_REVOKED',
+      targetOrigin: parsed.origin,
+      bridgeVersion: parsed.bridgeVersion,
+      resultSummary: { bridgeInstallationId: existingInstallation.id },
+    });
     return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_BRIDGE_INSTALLATION_REVOKED' }, { status: 409 }, corsHeaders);
   }
 
@@ -121,11 +232,33 @@ export async function POST(request: NextRequest) {
     .single();
   if (error || !data) return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_BRIDGE_HANDSHAKE_FAILED' }, { status: 409 }, corsHeaders);
 
-  await (serviceSupabase as any)
+  const { data: completedSetupLink, error: closeError } = await (serviceSupabase as any)
     .from('actionbridge_setup_links')
     .update({ status: 'completed' })
     .eq('id', setupLink.id)
-    .in('status', ['pending', 'opened']);
+    .eq('user_id', setupLink.user_id)
+    .in('status', ['pending', 'opened'])
+    .select('id,status')
+    .maybeSingle();
+  if (closeError || completedSetupLink?.status !== 'completed') {
+    await (serviceSupabase as any)
+      .from('actionbridge_bridge_installations')
+      .update({ status: 'stale', last_seen_at: now })
+      .eq('id', data.id)
+      .eq('user_id', setupLink.user_id);
+    await persistBridgeHandshakeDeniedAudit(serviceSupabase, setupLink, {
+      reason: 'ACTIONBRIDGE_SETUP_LINK_CLOSE_FAILED',
+      status: closeError ? 'failed' : 'denied',
+      targetOrigin: parsed.origin,
+      bridgeVersion: parsed.bridgeVersion,
+      resultSummary: {
+        bridgeInstallationId: data.id,
+        closeError: closeError?.message || null,
+        closeReturnedStatus: completedSetupLink?.status || null,
+      },
+    });
+    return bridgeHandshakeJson({ error: 'ACTIONBRIDGE_SETUP_LINK_CLOSE_FAILED' }, { status: 409 }, corsHeaders);
+  }
 
   await persistActionBridgeControlAuditEvent(serviceSupabase, {
     userId: setupLink.user_id,
